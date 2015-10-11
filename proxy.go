@@ -111,14 +111,18 @@ func (s *Proxy) Serve(lis net.Listener) error {
 		s.conns[st] = true
 		s.mu.Unlock()
 
-		go func() {
-			st.HandleStreams(func(stream *transport.Stream) {
+		var wg sync.WaitGroup
+		st.HandleStreams(func(stream *transport.Stream) {
+			wg.Add(1)
+			go func() {
 				s.handleStream(st, stream)
-			})
-			s.mu.Lock()
-			delete(s.conns, st)
-			s.mu.Unlock()
-		}()
+				wg.Done()
+			}()
+		})
+		wg.Wait()
+		s.mu.Lock()
+		delete(s.conns, st)
+		s.mu.Unlock()
 	}
 }
 
@@ -154,6 +158,7 @@ func (s *Proxy) handleStream(frontTrans transport.ServerTransport, frontStream *
 	// data coming from backend back to client call
 	egressPathChan := s.forwardDataFrames(backendStream, frontStream, frontTrans)
 
+	// wait for both data streams to complete.
 	egressErr := <- egressPathChan
 	ingressErr := <- ingressPathChan
 	if egressErr != nil || ingressErr != nil {
@@ -179,8 +184,8 @@ func (s *Proxy) backendTransportStream(ctx context.Context) (transport.ClientTra
 			return nil, nil, grpc.Errorf(codes.Aborted, "cant dial to backend: %v", err)
 		}
 	}
-	// TODO(michal): PickTransport IS NOT IN UPSTREAM GRPC!
-	_, backendTrans, err := grpcConn.PickTransport(ctx)
+	// TODO(michal): ClientConn.Picker() IS NOT IN UPSTREAM GRPC! https://github.com/grpc/grpc-go/pull/397
+	backendTrans, err := grpcConn.Picker().Pick(ctx)
 	frontendStream, _ := transport.StreamFromContext(ctx)
 	callHdr := &transport.CallHdr{
 		Method: frontendStream.Method(),
@@ -197,11 +202,13 @@ func (s *Proxy) backendTransportStream(ctx context.Context) (transport.ClientTra
 // It returns an error channel. `nil` on it signifies everything was fine, anything else is a serious problem.
 func (s *Proxy) forwardDataFrames(srcStream *transport.Stream, dstStream *transport.Stream, dstTransport transportWriter) chan error {
 	ret := make(chan error)
+
 	go func () {
 		data := make([]byte, 4096)
 		opt := &transport.Options{}
 		for {
 			n, err := srcStream.Read(data)
+
 			if err == io.EOF {
 				ret <- nil
 				break

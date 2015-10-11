@@ -17,10 +17,11 @@ import (
 	"time"
 	"net"
 	"testing"
+	"io"
 
-	"github.com/mwitkow-io/grpc-reverseproxy"
-	pb "github.com/mwitkow-io/grpc-reverseproxy/testservice"
 
+	"github.com/mwitkow-io/grpc-proxy"
+	pb "github.com/mwitkow-io/grpc-proxy/testservice"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/stretchr/testify/require"
@@ -30,8 +31,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"golang.org/x/net/context"
 	"github.com/stretchr/testify/assert"
-	"io"
-	"google.golang.org/grpc/transport"
 )
 
 
@@ -171,7 +170,6 @@ func (s *ProxyHappySuite) SetupSuite() {
 	proxyClientConn, err := grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure())
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	proxyServer := proxy.NewServer(func(ctx context.Context) (*grpc.ClientConn, error) {
-		transport.StreamFromContext()
 		md, ok := metadata.FromContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
