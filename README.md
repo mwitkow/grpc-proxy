@@ -36,7 +36,7 @@ proxy.Server(boundListener)
 
 This is *alpha* software, written as a proof of concept. It has been integration-tested, but please expect bugs.
 
-The current implementation depends on a public interface to `ClientConn.PickTransport`, which hopefully will be upstreamed.
+The current implementation depends on a public interface to `ClientConn.Picker()`, which hopefully will be upstreamed in [grpc-go#397](https://github.com/grpc/grpc-go/pull/397).
    
 
 ## Contributors
