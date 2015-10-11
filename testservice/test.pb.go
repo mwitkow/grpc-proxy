@@ -16,6 +16,8 @@ It has these top-level messages:
 package mwitkow_testproto
 
 import proto "github.com/golang/protobuf/proto"
+import fmt "fmt"
+import math "math"
 
 import (
 	context "golang.org/x/net/context"
@@ -23,11 +25,9 @@ import (
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
-var _ context.Context
-var _ grpc.ClientConn
-
-// Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
+var _ = math.Inf
 
 type Empty struct {
 }
@@ -45,13 +45,17 @@ func (m *PingRequest) String() string { return proto.CompactTextString(m) }
 func (*PingRequest) ProtoMessage()    {}
 
 type PingResponse struct {
-	Value   string `protobuf:"bytes,1,opt" json:"Value,omitempty"`
+	Value string `protobuf:"bytes,1,opt,name=Value" json:"Value,omitempty"`
 	Counter int32  `protobuf:"varint,2,opt,name=counter" json:"counter,omitempty"`
 }
 
 func (m *PingResponse) Reset()         { *m = PingResponse{} }
 func (m *PingResponse) String() string { return proto.CompactTextString(m) }
 func (*PingResponse) ProtoMessage()    {}
+
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
 
 // Client API for TestService service
 
@@ -142,9 +146,9 @@ func RegisterTestServiceServer(s *grpc.Server, srv TestServiceServer) {
 	s.RegisterService(&_TestService_serviceDesc, srv)
 }
 
-func _TestService_PingEmpty_Handler(srv interface{}, ctx context.Context, codec grpc.Codec, buf []byte) (interface{}, error) {
+func _TestService_PingEmpty_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
 	in := new(Empty)
-	if err := codec.Unmarshal(buf, in); err != nil {
+	if err := dec(in); err != nil {
 		return nil, err
 	}
 	out, err := srv.(TestServiceServer).PingEmpty(ctx, in)
@@ -154,9 +158,9 @@ func _TestService_PingEmpty_Handler(srv interface{}, ctx context.Context, codec 
 	return out, nil
 }
 
-func _TestService_Ping_Handler(srv interface{}, ctx context.Context, codec grpc.Codec, buf []byte) (interface{}, error) {
+func _TestService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
 	in := new(PingRequest)
-	if err := codec.Unmarshal(buf, in); err != nil {
+	if err := dec(in); err != nil {
 		return nil, err
 	}
 	out, err := srv.(TestServiceServer).Ping(ctx, in)
@@ -166,9 +170,9 @@ func _TestService_Ping_Handler(srv interface{}, ctx context.Context, codec grpc.
 	return out, nil
 }
 
-func _TestService_PingError_Handler(srv interface{}, ctx context.Context, codec grpc.Codec, buf []byte) (interface{}, error) {
+func _TestService_PingError_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error) (interface{}, error) {
 	in := new(PingRequest)
-	if err := codec.Unmarshal(buf, in); err != nil {
+	if err := dec(in); err != nil {
 		return nil, err
 	}
 	out, err := srv.(TestServiceServer).PingError(ctx, in)
