@@ -20,8 +20,8 @@ import (
 	"io"
 
 
-	"github.com/mwitkow-io/grpc-proxy"
-	pb "github.com/mwitkow-io/grpc-proxy/testservice"
+	"github.com/mwitkow/grpc-proxy"
+	pb "github.com/mwitkow/grpc-proxy/testservice"
 
 	"github.com/stretchr/testify/suite"
 	"github.com/stretchr/testify/require"

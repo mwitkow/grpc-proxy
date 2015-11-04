@@ -43,7 +43,7 @@ The current implementation depends on a public interface to `ClientConn.Picker()
 
 Names in no particular order:
 
-* [mwitkow-io](https://github.com/mwitkow)
+* [mwitkow](https://github.com/mwitkow)
 
 ## License
 
