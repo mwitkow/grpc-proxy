@@ -183,7 +183,7 @@ func ProxyStream(director StreamDirector, logger grpclog.Logger, frontTrans tran
 	// wait for both data streams to complete.
 	egressErr := <-egressPathChan
 	ingressErr := <-ingressPathChan
-	if egressErr != nil || ingressErr != nil {
+	if egressErr != io.EOF || ingressErr != io.EOF {
 		logger.Printf("proxy: Proxy.handleStream %v failure during transfer ingres: %v egress: %v", frontStream.Method(), ingressErr, egressErr)
 		frontTrans.WriteStatus(frontStream, codes.Unavailable, fmt.Sprintf("problem in transfer ingress: %v egress: %v", ingressErr, egressErr))
 		return
@@ -223,18 +223,17 @@ func backendTransportStream(director StreamDirector, ctx context.Context) (trans
 // forwardDataFrames moves data from one gRPC transport `Stream` to another in async fashion.
 // It returns an error channel. `nil` on it signifies everything was fine, anything else is a serious problem.
 func forwardDataFrames(srcStream *transport.Stream, dstStream *transport.Stream, dstTransport transportWriter) chan error {
-	ret := make(chan error)
+	ret := make(chan error, 1)
 
 	go func() {
 		data := make([]byte, 4096)
 		opt := &transport.Options{}
 		for {
 			n, err := srcStream.Read(data)
-
-			if err == io.EOF {
-				ret <- nil
-				break
-			} else if err != nil {
+			if err != nil {  // including io.EOF
+				// Send nil to terminate the stream.
+				opt.Last = true
+				dstTransport.Write(dstStream, nil, opt)
 				ret <- err
 				break
 			}
@@ -243,9 +242,6 @@ func forwardDataFrames(srcStream *transport.Stream, dstStream *transport.Stream,
 				break
 			}
 		}
-		// Send nil to terminate the stream.
-		opt.Last = true
-		dstTransport.Write(dstStream, nil, opt)
 		close(ret)
 	}()
 	return ret
