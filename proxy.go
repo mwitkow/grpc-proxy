@@ -84,7 +84,7 @@ func (s *Proxy) Serve(lis net.Listener) error {
 			return err
 		}
 		var authInfo credentials.AuthInfo = nil
-		if creds, ok := s.opts.creds.(credentials.TransportAuthenticator); ok {
+		if creds, ok := s.opts.creds.(credentials.TransportCredentials); ok {
 			var conn net.Conn
 			conn, authInfo, err = creds.ServerHandshake(c)
 			if err != nil {
@@ -206,8 +206,9 @@ func backendTransportStream(director StreamDirector, ctx context.Context) (trans
 			return nil, nil, grpc.Errorf(codes.Aborted, "cant dial to backend: %v", err)
 		}
 	}
-	// TODO(michal): ClientConn.Picker() IS NOT IN UPSTREAM GRPC! https://github.com/grpc/grpc-go/pull/397
-	backendTrans, err := grpcConn.Picker().Pick(ctx)
+	// TODO(michal): ClientConn.GetTransport() IS NOT IN UPSTREAM GRPC!
+  // To make this work, copy patch/get_transport.go to google.golang.org/grpc/
+	backendTrans, _, err := grpcConn.GetTransport(ctx)
 	frontendStream, _ := transport.StreamFromContext(ctx)
 	callHdr := &transport.CallHdr{
 		Method: frontendStream.Method(),

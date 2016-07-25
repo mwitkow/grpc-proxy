@@ -18,7 +18,7 @@ import (
 )
 
 type options struct {
-	creds                credentials.Credentials
+	creds                credentials.TransportCredentials
 	logger               grpclog.Logger
 	maxConcurrentStreams uint32
 }
@@ -43,7 +43,7 @@ func MaxConcurrentStreams(n uint32) ProxyOption {
 }
 
 // Creds returns a ProxyOption that sets credentials for server connections.
-func Creds(c credentials.Credentials) ProxyOption {
+func Creds(c credentials.TransportCredentials) ProxyOption {
 	return func(o *options) {
 		o.creds = c
 	}
