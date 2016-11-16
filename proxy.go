@@ -161,12 +161,33 @@ func (s *Proxy) Stop() {
 
 // ProxyStream performs a forward of a gRPC frontend stream to a backend.
 func ProxyStream(director StreamDirector, logger grpclog.Logger, frontTrans transport.ServerTransport, frontStream *transport.Stream) {
-	backendTrans, backendStream, err := backendTransportStream(director, frontStream.Context())
+	grpcConn, err := director(frontStream.Context())
 	if err != nil {
+		if grpc.Code(err) == codes.Unknown { // rpcError check
+			err = grpc.Errorf(codes.Aborted, "cant dial to backend: %v", err)
+		}
 		frontTrans.WriteStatus(frontStream, grpc.Code(err), grpc.ErrorDesc(err))
-		logger.Printf("proxy: Proxy.handleStream %v failed to allocate backend: %v", frontStream.Method(), err)
+		logger.Printf("proxy: Proxy.handleStream %v %v", frontStream.Method(), err)
 		return
 	}
+
+	proxied, err := ProxyStreamToConn(frontStream.Context(), grpcConn, frontTrans, frontStream)
+	if !proxied {
+		logger.Printf("proxy: Proxy.handleStream %v %v", frontStream.Method(), grpc.ErrorDesc(err))
+	}
+	frontTrans.WriteStatus(frontStream, grpc.Code(err), grpc.ErrorDesc(err))
+}
+
+// ProxyStreamToConn forwards a gRPC stream over the provided backend connection.
+// Returns a boolean indicating if the stream was forwarded successfully.
+// The returned error describes the forwarding problem if one was encountered, and the RPC status if
+// forwarding was successful.
+func ProxyStreamToConn(ctx context.Context, backendConn *grpc.ClientConn, frontTrans transport.ServerTransport, frontStream *transport.Stream) (bool, error) {
+	backendTrans, backendStream, err := backendTransportStream(backendConn, ctx)
+	if err != nil {
+		return false, err
+	}
+
 	defer backendTrans.CloseStream(backendStream, nil)
 
 	// data coming from client call to backend
@@ -184,31 +205,24 @@ func ProxyStream(director StreamDirector, logger grpclog.Logger, frontTrans tran
 	egressErr := <-egressPathChan
 	ingressErr := <-ingressPathChan
 	if egressErr != io.EOF || ingressErr != io.EOF {
-		logger.Printf("proxy: Proxy.handleStream %v failure during transfer ingres: %v egress: %v", frontStream.Method(), ingressErr, egressErr)
-		frontTrans.WriteStatus(frontStream, codes.Unavailable, fmt.Sprintf("problem in transfer ingress: %v egress: %v", ingressErr, egressErr))
-		return
+		return false, grpc.Errorf(codes.Unavailable, "problem in transfer ingress: %v egress: %v", ingressErr, egressErr)
 	}
 	// handle trailing metadata
 	trailingMd := backendStream.Trailer()
 	if len(trailingMd) > 0 {
 		frontStream.SetTrailer(trailingMd)
 	}
-	frontTrans.WriteStatus(frontStream, backendStream.StatusCode(), backendStream.StatusDesc())
+	return true, grpc.Errorf(backendStream.StatusCode(), "%v", backendStream.StatusDesc())
 }
 
 // backendTransportStream picks and establishes a Stream to the backend.
-func backendTransportStream(director StreamDirector, ctx context.Context) (transport.ClientTransport, *transport.Stream, error) {
-	grpcConn, err := director(ctx)
-	if err != nil {
-		if grpc.Code(err) != codes.Unknown { // rpcError check
-			return nil, nil, err
-		} else {
-			return nil, nil, grpc.Errorf(codes.Aborted, "cant dial to backend: %v", err)
-		}
-	}
+func backendTransportStream(grpcConn *grpc.ClientConn, ctx context.Context) (transport.ClientTransport, *transport.Stream, error) {
 	// TODO(michal): ClientConn.GetTransport() IS NOT IN UPSTREAM GRPC!
-  // To make this work, copy patch/get_transport.go to google.golang.org/grpc/
+	// To make this work, copy patch/get_transport.go to google.golang.org/grpc/
 	backendTrans, _, err := grpcConn.GetTransport(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	frontendStream, _ := transport.StreamFromContext(ctx)
 	callHdr := &transport.CallHdr{
 		Method: frontendStream.Method(),
