@@ -1,53 +1,59 @@
 # gRPC Proxy
 
-This is an implementation of a [gRPC](http://www.grpc.io/) Proxying Server in Golang, based on [grpc-go](https://github.com/grpc/grpc-go). Features:
+[![Travis Build](https://travis-ci.org/mwitkow/go-proxy.svg?branch=master)](https://travis-ci.org/mwitkow/go-proxy)
+[![Go Report Card](https://goreportcard.com/badge/github.com/mwitkow/go-proxy)](https://goreportcard.com/report/github.com/mwitkow/go-proxy)
+[![GoDoc](http://img.shields.io/badge/GoDoc-Reference-blue.svg)](https://godoc.org/github.com/mwitkow/go-proxy)
+[![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
- * full support for all Streams: Unitary RPCs and Streams: One-Many, Many-One, Many-Many
- * pass-through mode: no overhead of encoding/decoding messages
- * customizable `StreamDirector` routing based on `context.Context` of the `Stream`, allowing users to return
-   a `grpc.ClientConn` after dialing the backend of choice based on:
-     - inspection of service and method name
-     - inspection of user credentials in `authorization` header
-     - inspection of custom user-features
-     - inspection of TLS client cert credentials
- * integration tests
- 
-## Example Use
- 
+[gRPC Go](https://github.com/grpc/grpc-go) Proxy server
+
+## Project Goal
+
+Build a transparent reverse proxy for gRPC targets that will make it easy to expose gRPC services
+over the internet. This includes:
+ * no needed knowledge of the semantics of requests exchanged in the call (independent rollouts)
+ * easy, declarative definition of backends and their mappings to frontends
+ * simple round-robin load balancing of inbound requests from a single connection to multiple backends
+
+The project now exists as a **proof of concept**, with the key piece being the `proxy` package that
+is a generic gRPC reverse proxy handler.
+
+## Proxy Handler
+
+The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
+not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
+
+Defining a `StreamDirector` that decides where (if at all) to send the request
 ```go
-
-director := func(ctx context.Context) (*grpc.ClientConn, error) {
-    if err := CheckBearerToken(ctx); err != nil {
-        return nil, grpc.Errorf(codes.PermissionDenied, "unauthorized access: %v", err)
+director = func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error) {
+    // Make sure we never forward internal services.
+    if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
+        return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
     }
-    stream, _ := transport.StreamFromContext(ctx)
-    backend, found := PreDialledBackends[stream.Method()];
-    if !found {
-        return nil, grpc.Errorf(codes.Unimplemented, "the service %v is not implemented", stream.Method)
+    md, ok := metadata.FromContext(ctx)
+    if ok {
+        // Decide on which backend to dial
+        if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
+            // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
+            return grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+        } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
+            return grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+        }
     }
-    return backend, nil
+    return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 }
-
-proxy := grpcproxy.NewProxy(director)
-proxy.Server(boundListener)
 ```
+Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served
+locally:
 
-## Status
-
-This is *alpha* software, written as a proof of concept. It has been integration-tested, but please expect bugs.
-
-The current implementation depends on a public interface to `ClientConn.Picker()`, which hopefully will be upstreamed in [grpc-go#397](https://github.com/grpc/grpc-go/pull/397).
-   
-
-## Contributors
-
-Names in no particular order:
-
-* [mwitkow](https://github.com/mwitkow)
+```go
+server := grpc.NewServer(
+    grpc.CustomCodec(proxy.Codec()),
+    grpc.UnknownServiceHandler(proxy.TransparentHandler(director)))
+pb_test.RegisterTestServiceServer(server, &testImpl{})
+```
 
 ## License
 
-`grpc-proxy` is released under the Apache 2.0 license. See [LICENSE.txt](https://github.com/spf13/mwitkow-io/blob/grpcproxy/LICENSE.txt).
+`grpc-proxy` is released under the Apache 2.0 license. See [LICENSE.txt](LICENSE.txt).
 
-
-Part of the main server loop are lifted from the [grpc-go](https://github.com/grpc/grpc-go) `Server`, which is copyrighted Google Inc. and licensed under MIT license.
