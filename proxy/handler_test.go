@@ -1,31 +1,18 @@
-//// Copyright © 2015 Michal Witkowski <michal@improbable.io>
-////
-//// Licensed under the Apache License, Version 2.0 (the "License");
-//// you may not use this file except in compliance with the License.
-//// You may obtain a copy of the License at
-//// http://www.apache.org/licenses/LICENSE-2.0
-////
-//// Unless required by applicable law or agreed to in writing, software
-//// distributed under the License is distributed on an "AS IS" BASIS,
-//// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//// See the License for the specific language governing permissions and
-//// limitations under the License.
-//
+// Copyright 2017 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
+
 package proxy_test
 
 import (
+	"io"
+	"log"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mwitkow/grpc-proxy"
-	pb "github.com/mwitkow/grpc-proxy/testservice"
-
-	"io"
-	"log"
-	"os"
-
+	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -34,6 +21,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
+
+	pb "github.com/mwitkow/grpc-proxy/testservice"
 )
 
 const (
@@ -173,9 +162,9 @@ func (s *ProxyHappySuite) SetupSuite() {
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
-	proxyClientConn, err := grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), proxy.WithProxyCodec())
+	proxyClientConn, err := grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context) (*grpc.ClientConn, error) {
+	director := func(ctx context.Context, fullName string) (*grpc.ClientConn, error) {
 		md, ok := metadata.FromContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
@@ -185,11 +174,13 @@ func (s *ProxyHappySuite) SetupSuite() {
 		return proxyClientConn, nil
 	}
 	s.proxy = grpc.NewServer(
-		proxy.ProxyCodec(),
+		grpc.CustomCodec(proxy.Codec()),
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
-	proxy.RegisterProxyStreams(s.proxy, director,
+	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
+	proxy.RegisterService(s.proxy, director,
 		"mwitkow.testproto.TestService",
-		"PingEmpty", "Ping", "PingError", "PingList")
+		"Ping")
 
 	// Start the serving loops.
 	go func() {

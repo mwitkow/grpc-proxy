@@ -2,13 +2,14 @@ package proxy
 
 import (
 	"testing"
+
 	"github.com/stretchr/testify/require"
 )
 
-func TestProxyCodec_ReadYourWrites(t *testing.T) {
+func TestCodec_ReadYourWrites(t *testing.T) {
 	framePtr := &frame{}
 	data := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	codec := codec{}
+	codec := rawCodec{}
 	require.NoError(t, codec.Unmarshal(data, framePtr), "unmarshalling must go ok")
 	out, err := codec.Marshal(framePtr)
 	require.NoError(t, err, "no marshal error")

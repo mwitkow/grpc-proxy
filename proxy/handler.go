@@ -1,3 +1,6 @@
+// Copyright 2017 Michal Witkowski. All Rights Reserved.
+// See LICENSE for licensing terms.
+
 package proxy
 
 import (
@@ -15,8 +18,12 @@ var (
 	}
 )
 
-func RegisterProxyStreams(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
-	streamer := &proxyStreamer{director}
+// RegisterService sets up a proxy handler for a particular gRPC service and method.
+// The behaviour is the same as if you were registering a handler method, e.g. from a codegenerated pb.go file.
+//
+// This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
+func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
+	streamer := &handler{director}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*interface{})(nil),
@@ -33,25 +40,36 @@ func RegisterProxyStreams(server *grpc.Server, director StreamDirector, serviceN
 	server.RegisterService(fakeDesc, streamer)
 }
 
-type proxyStreamer struct {
+// TransparentHandler returns a handler that attempts to proxy all requests that are not registered in the server.
+// The indented use here is as a transparent proxy, where the server doesn't know about the services implemented by the
+// backends. It should be used as a `grpc.UnknownServiceHandler`.
+//
+// This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
+func TransparentHandler(director StreamDirector) grpc.StreamHandler {
+	streamer := &handler{director}
+	return streamer.handler
+}
+
+type handler struct {
 	director StreamDirector
 }
 
-// proxyStreamHandler is where the real magic of proxying happens.
+// handler is where the real magic of proxying happens.
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
-func (s *proxyStreamer) handler(srv interface{}, serverStream grpc.ServerStream) error {
-	backendConn, err := s.director(serverStream.Context())
-	if err != nil {
-		return err
-	}
+func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
 	// little bit of gRPC internals never hurt anyone
 	lowLevelServerStream, ok := transport.StreamFromContext(serverStream.Context())
 	if !ok {
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
+	fullMethodName := lowLevelServerStream.Method()
+	backendConn, err := s.director(serverStream.Context(), fullMethodName)
+	if err != nil {
+		return err
+	}
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(serverStream.Context(), clientStreamDescForProxying, backendConn, lowLevelServerStream.Method())
+	clientStream, err := grpc.NewClientStream(serverStream.Context(), clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
 	}
@@ -59,7 +77,7 @@ func (s *proxyStreamer) handler(srv interface{}, serverStream grpc.ServerStream)
 	s2cErr := <-s.forwardServerToClient(serverStream, clientStream)
 	c2sErr := <-s.forwardClientToServer(clientStream, serverStream)
 	if s2cErr != io.EOF {
-		return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr, c2sErr)
+		return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 	}
 	serverStream.SetTrailer(clientStream.Trailer())
 	// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
@@ -69,7 +87,7 @@ func (s *proxyStreamer) handler(srv interface{}, serverStream grpc.ServerStream)
 	return nil
 }
 
-func (s *proxyStreamer) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
+func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
@@ -102,7 +120,7 @@ func (s *proxyStreamer) forwardClientToServer(src grpc.ClientStream, dst grpc.Se
 	return ret
 }
 
-func (s *proxyStreamer) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
+func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
