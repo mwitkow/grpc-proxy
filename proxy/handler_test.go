@@ -210,12 +210,12 @@ func (s *ProxyHappySuite) SetupSuite() {
 		"Ping")
 
 	// Start the serving loops.
+	s.T().Logf("starting grpc.Server at: %v", s.serverListener.Addr().String())
 	go func() {
-		s.T().Logf("starting grpc.Server at: %v", s.serverListener.Addr().String())
 		s.server.Serve(s.serverListener)
 	}()
+	s.T().Logf("starting grpc.Proxy at: %v", s.proxyListener.Addr().String())
 	go func() {
-		s.T().Logf("starting grpc.Proxy at: %v", s.proxyListener.Addr().String())
 		s.proxy.Serve(s.proxyListener)
 	}()
 
