@@ -22,6 +22,8 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
 
+	"fmt"
+
 	pb "github.com/mwitkow/grpc-proxy/testservice"
 )
 
@@ -67,6 +69,27 @@ func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like turtles."))
 	for i := 0; i < countListResponses; i++ {
 		stream.Send(&pb.PingResponse{Value: ping.Value, Counter: int32(i)})
+	}
+	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
+	return nil
+}
+
+func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) error {
+	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like turtles."))
+	counter := int32(0)
+	for {
+		ping, err := stream.Recv()
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			require.NoError(s.t, err, "can't fail reading stream")
+			return err
+		}
+		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
+		if err := stream.Send(pong); err != nil {
+			require.NoError(s.t, err, "can't fail sending back a pong")
+		}
+		counter += 1
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
 	return nil
@@ -125,24 +148,28 @@ func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 	assert.Equal(s.T(), "testing rejection", grpc.ErrorDesc(err))
 }
 
-func (s *ProxyHappySuite) TestPingListStreamsAll() {
-	stream, err := s.testClient.PingList(s.ctx(), &pb.PingRequest{Value: "foo"})
-	require.NoError(s.T(), err, "PingList request should be successful.")
-	// Check that the header arrives before all entries.
-	headerMd, err := stream.Header()
-	require.NoError(s.T(), err, "PingList headers should not error.")
-	assert.Len(s.T(), headerMd, 1, "PingList response headers user contain metadata")
-	count := 0
-	for {
+func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
+	stream, err := s.testClient.PingStream(s.ctx())
+	require.NoError(s.T(), err, "PingStream request should be successful.")
+
+	for i := 0; i < countListResponses; i++ {
+		ping := &pb.PingRequest{Value: fmt.Sprintf("foo:%d", i)}
+		require.NoError(s.T(), stream.Send(ping), "sending to PingStream must not fail")
 		resp, err := stream.Recv()
 		if err == io.EOF {
 			break
 		}
-		require.NoError(s.T(), err, "PingList stream should not be interrupted.")
-		require.Equal(s.T(), "foo", resp.Value)
-		count = count + 1
+		if i == 0 {
+			// Check that the header arrives before all entries.
+			headerMd, err := stream.Header()
+			require.NoError(s.T(), err, "PingStream headers should not error.")
+			assert.Len(s.T(), headerMd, 1, "PingStream response headers user contain metadata")
+		}
+		assert.EqualValues(s.T(), i, resp.Counter, "ping roundtrip must succeed with the correct id")
 	}
-	assert.Equal(s.T(), countListResponses, count, "PingList must successfully return all outputs")
+	require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+	_, err = stream.Recv()
+	require.Equal(s.T(), io.EOF, err, "stream should close with io.EOF, meaining OK")
 	// Check that the trailer headers are here.
 	trailerMd := stream.Trailer()
 	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")

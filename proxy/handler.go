@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/transport"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -64,21 +65,28 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
+	clientCtx, clientCancel := context.WithCancel(serverStream.Context())
 	backendConn, err := s.director(serverStream.Context(), fullMethodName)
 	if err != nil {
 		return err
 	}
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(serverStream.Context(), clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
 	}
-	defer clientStream.CloseSend() // always close this!
-	s2cErr := <-s.forwardServerToClient(serverStream, clientStream)
-	c2sErr := <-s.forwardClientToServer(clientStream, serverStream)
+
+	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
+	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+	s2cErr := <-s2cErrChan
 	if s2cErr != io.EOF {
+		clientCancel()
 		return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+	} else {
+		clientStream.CloseSend()
 	}
+	c2sErr := <-c2sErrChan
+
 	serverStream.SetTrailer(clientStream.Trailer())
 	// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 	if c2sErr != io.EOF {
