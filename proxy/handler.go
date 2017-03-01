@@ -148,12 +148,10 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 		f := &frame{}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
-				//grpclog.Printf("s2c err: %v", err)
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
 			if err := dst.SendMsg(f); err != nil {
-				//grpclog.Printf("s2c err: %v", err)
 				ret <- err
 				break
 			}
