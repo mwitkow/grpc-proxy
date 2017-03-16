@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package mwitkow.grpcproxy.backendpool;
+
+/// Backend is a gRPC ClientConn pool maintained to a single serivce.
+message Backend {
+    /// name is the string identifying the bakcend in all other conifgs.
+    string name = 1;
+
+    /// balancer decides which balancing policy to use.
+    Balancer balancer = 2;
+
+    /// disable_conntracking turns off the /debug/events tracing and Prometheus monitoring of the pool sie for this backend.
+    bool disable_conntracking = 3;
+
+    /// security controls the TLS connection details for the backend. If not present, Insecure (plain text) mode is used.
+    Security security = 4;
+
+    /// interceptors controls what interceptors will be enabled for this backend.
+    repeated Interceptor interceptors = 5;
+
+    oneof resolver {
+        SrvResolver srv = 10;
+        KubeResolver k8s = 11;
+    }
+}
+
+/// Balancer chooses which gRPC balancing policy to use.
+enum Balancer {
+    // ROUND_ROBIN is the simpliest and default load balancing policy
+    ROUND_ROBIN = 0;
+}
+
+message Interceptor {
+    oneof interceptor {
+        bool prometheus = 1;
+    }
+}
+
+/// Security settings for a backend.
+message Security {
+    /// insecure_skip_verify skips the server certificate verification completely.
+    /// No TLS config (for client or server) will be used. This should *not* be used in production software.
+    bool insecure_skip_verify = 1;
+
+    /// config_name indicates the TlsServerConfig to be used for this connection.
+    string config_name = 2;
+    // TODO(mwitkow): add tls-config specification for server-side (CA certs etc.).
+    // TODO(mwitkow): add tls-config specification for client-side (client-cert etc.).
+}
+
+/// SrvBackend describes a gRPC backend that is resolved and load balanced using SRV.
+message SrvResolver {
+    /// dns_name specifies the address to look up using DNS SRV. Needs to be a FQDN.
+    /// E.g. "_grpc._tcp.someservice.somenamespace.svc.cluster.local"
+    string dns_name = 2;
+}
+
+/// KubeResolver uses the Kubernetes Endpoints API to identify the service.
+/// It requires the job to run inside a K8S pod and uses the pod's credentails to fetch the service information.
+message KubeResolver {
+    /// namespace is the k8s namespace to use.
+    /// If unset, it deafults to 'deafult'.
+    string namespace = 1;
+    /// service_name is the k8s service name to use.
+    string service_name = 2;
+    /// port_name is the name of the port to bind in the service.
+    string port_name = 3;
+}

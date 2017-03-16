@@ -1,0 +1,18 @@
+
+syntax = "proto3";
+
+package mwitkow.grpcproxy.backendpool;
+
+import "backend.proto";
+
+/// Config is the top level configuration message for a backend pool.
+message Config {
+    repeated TlsServerConfig tls_server_configs = 1;
+    repeated Backend backends = 3;
+}
+
+message TlsServerConfig {
+    string name = 1;
+    // TODO(mwitkow): add tls-config declarations.
+}
+
