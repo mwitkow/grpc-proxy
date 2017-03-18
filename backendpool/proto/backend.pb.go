@@ -10,7 +10,7 @@ It is generated from these files:
 	config.proto
 
 It has these top-level messages:
-	Backend
+	Route
 	Interceptor
 	Security
 	SrvResolver
@@ -55,7 +55,7 @@ func (x Balancer) String() string {
 }
 func (Balancer) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
-// / Backend is a gRPC ClientConn pool maintained to a single serivce.
+// / Route is a gRPC ClientConn pool maintained to a single serivce.
 type Backend struct {
 	// / name is the string identifying the bakcend in all other conifgs.
 	Name string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
@@ -172,7 +172,7 @@ func _Backend_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 		}
 	case nil:
 	default:
-		return fmt.Errorf("Backend.Resolver has unexpected type %T", x)
+		return fmt.Errorf("Route.Resolver has unexpected type %T", x)
 	}
 	return nil
 }
@@ -397,7 +397,7 @@ func (m *KubeResolver) GetPortName() string {
 }
 
 func init() {
-	proto.RegisterType((*Backend)(nil), "mwitkow.grpcproxy.backendpool.Backend")
+	proto.RegisterType((*Backend)(nil), "mwitkow.grpcproxy.backendpool.Route")
 	proto.RegisterType((*Interceptor)(nil), "mwitkow.grpcproxy.backendpool.Interceptor")
 	proto.RegisterType((*Security)(nil), "mwitkow.grpcproxy.backendpool.Security")
 	proto.RegisterType((*SrvResolver)(nil), "mwitkow.grpcproxy.backendpool.SrvResolver")
@@ -405,7 +405,7 @@ func init() {
 	proto.RegisterEnum("mwitkow.grpcproxy.backendpool.Balancer", Balancer_name, Balancer_value)
 }
 
-func init() { proto.RegisterFile("backend.proto", fileDescriptor0) }
+func init() { proto.RegisterFile("route.proto", fileDescriptor0) }
 
 var fileDescriptor0 = []byte{
 	// 436 bytes of a gzipped FileDescriptorProto

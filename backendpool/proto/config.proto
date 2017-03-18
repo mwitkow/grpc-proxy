@@ -3,7 +3,7 @@ syntax = "proto3";
 
 package mwitkow.grpcproxy.backendpool;
 
-import "backend.proto";
+import "route.proto";
 
 /// Config is the top level configuration message for a backend pool.
 message Config {

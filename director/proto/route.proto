@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package mwitkow.grpcproxy.director;
+
+/// Backend is a gRPC ClientConn pool maintained to a single serivce.
+message Route {
+    /// backend_name is the string identifying the backend to send data to.
+    string backend_name = 1;
+
+    /// service_name_matcher is a globbing expression that matches a full gRPC service name.
+    /// For example a method call to 'com.example.MyService/Create' would be matched by:
+    ///  - com.example.MyService
+    ///  - com.example.*
+    ///  - com.*
+    ///  - *
+    /// If not present, '*' is default.
+    string service_name_matcher = 2;
+
+    /// authority_matcher matches on the ':authority' header (a.k.a. Host header) enabling Virtual Host-like proxying.
+    /// The matching is done through lower-case string-equality.
+    /// If none are present, the route skips ':authority' checks.
+    string authority_matcher = 3;
+
+    /// metadata_matcher matches any gRPC inbound request metadata.
+    /// Eeach key provided must find a match for the route to match.
+    /// The matching is done through lower-case key match and explicit string-equality of values.
+    /// If a given metadata entry has more than one string value, at least one of them needs to match.
+    /// If none are present, the route skips metadata checks.
+    map<string, string> metadata_matcher = 4;
+
+    /// TODO(mwitkow): Add fields that require TLS Client auth, or :authorization keys.
+}

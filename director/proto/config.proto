@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package mwitkow.grpcproxy.director;
+
+import "route.proto";
+
+/// Config is the top level configuration message the director.
+message Config {
+    repeated Route routes = 1;
+}
+
