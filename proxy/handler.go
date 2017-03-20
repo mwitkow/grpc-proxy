@@ -6,6 +6,7 @@ package proxy
 import (
 	"io"
 
+	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/transport"
@@ -64,27 +65,49 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
+	clientCtx, clientCancel := context.WithCancel(serverStream.Context())
 	backendConn, err := s.director(serverStream.Context(), fullMethodName)
 	if err != nil {
 		return err
 	}
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(serverStream.Context(), clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
 	}
-	defer clientStream.CloseSend() // always close this!
-	s2cErr := <-s.forwardServerToClient(serverStream, clientStream)
-	c2sErr := <-s.forwardClientToServer(clientStream, serverStream)
-	if s2cErr != io.EOF {
-		return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
+	defer close(s2cErrChan)
+	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+	defer close(c2sErrChan)
+	// We don't know which side is going to stop sending first, so we need a select between the two.
+	for i := 0; i < 2; i++ {
+		select {
+		case s2cErr := <-s2cErrChan:
+			if s2cErr == io.EOF {
+				// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore./
+				// the clientStream>serverStream may continue pumping though.
+				clientStream.CloseSend()
+				break
+			} else {
+				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
+				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
+				// exit with an error to the stack
+				clientCancel()
+				return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+			}
+		case c2sErr := <-c2sErrChan:
+			// This happens when the clientStream has nothing else to offer (io.EOF), returned a gRPC error. In those two
+			// cases we may have received Trailers as part of the call. In case of other errors (stream closed) the trailers
+			// will be nil.
+			serverStream.SetTrailer(clientStream.Trailer())
+			// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
+			if c2sErr != io.EOF {
+				return c2sErr
+			}
+			return nil
+		}
 	}
-	serverStream.SetTrailer(clientStream.Trailer())
-	// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
-	if c2sErr != io.EOF {
-		return c2sErr
-	}
-	return nil
+	return grpc.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 }
 
 func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
@@ -115,7 +138,6 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 				break
 			}
 		}
-		close(ret)
 	}()
 	return ret
 }
@@ -134,7 +156,6 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 				break
 			}
 		}
-		close(ret)
 	}()
 	return ret
 }
