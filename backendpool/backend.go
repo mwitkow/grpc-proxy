@@ -25,6 +25,7 @@ var (
 		Timeout:   1 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}.DialContext
+	ParentSrvResolver = srv.NewGoResolver(5 * time.Second)
 )
 
 type backend struct {
@@ -102,7 +103,7 @@ func chooseInterceptors(cnf *pb.Backend) []grpc.DialOption {
 
 func chooseNamingResolver(cnf *pb.Backend) (string, naming.Resolver, error) {
 	if s := cnf.GetSrv(); s != nil {
-		return s.GetDnsName(), grpcsrvlb.New(srv.NewGoResolver(5 * time.Second)), nil
+		return s.GetDnsName(), grpcsrvlb.New(ParentSrvResolver), nil
 	} else if k := cnf.GetK8S(); k != nil {
 		// see https://github.com/sercand/kuberesolver/blob/master/README.md
 		target := fmt.Sprintf("kubernetes://%v:%v", k.ServiceName, k.PortName)
