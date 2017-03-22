@@ -1,4 +1,4 @@
-package director
+package router
 
 import (
 	pb "github.com/mwitkow/grpc-proxy/director/proto"
@@ -13,14 +13,23 @@ import (
 
 var (
 	emptyMd       = metadata.Pairs()
-	routeNotFound = grpc.Errorf(codes.Unimplemented, "unknown route")
+	routeNotFound = grpc.Errorf(codes.Unimplemented, "unknown route to service")
 )
+
+type Router interface {
+	// Route returns a backend name for a given call, or an error.
+	Route(ctx context.Context, fullMethodName string) (backendName string, err error)
+}
 
 type router struct {
 	config *pb.Config
 }
 
-func (r *router) Route(fullMethodName string, ctx context.Context) (backendName string, err error) {
+func NewStatic(cnf *pb.Config) *router {
+	return &router{config: cnf}
+}
+
+func (r *router) Route(ctx context.Context, fullMethodName string) (backendName string, err error) {
 	md, ok := metadata.FromContext(ctx)
 	if !ok {
 		md = emptyMd

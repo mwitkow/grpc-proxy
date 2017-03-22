@@ -40,13 +40,13 @@ message Interceptor {
 /// Security settings for a backend.
 message Security {
     /// insecure_skip_verify skips the server certificate verification completely.
-    /// No TLS config (for client or server) will be used. This should *not* be used in production software.
+    /// No TLS config (for testclient or server) will be used. This should *not* be used in production software.
     bool insecure_skip_verify = 1;
 
     /// config_name indicates the TlsServerConfig to be used for this connection.
     string config_name = 2;
     // TODO(mwitkow): add tls-config specification for server-side (CA certs etc.).
-    // TODO(mwitkow): add tls-config specification for client-side (client-cert etc.).
+    // TODO(mwitkow): add tls-config specification for testclient-side (testclient-cert etc.).
 }
 
 /// SrvBackend describes a gRPC backend that is resolved and load balanced using SRV.

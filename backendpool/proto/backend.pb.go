@@ -314,7 +314,7 @@ func _Interceptor_OneofSizer(msg proto.Message) (n int) {
 // / Security settings for a backend.
 type Security struct {
 	// / insecure_skip_verify skips the server certificate verification completely.
-	// / No TLS config (for client or server) will be used. This should *not* be used in production software.
+	// / No TLS config (for testclient or server) will be used. This should *not* be used in production software.
 	InsecureSkipVerify bool `protobuf:"varint,1,opt,name=insecure_skip_verify,json=insecureSkipVerify" json:"insecure_skip_verify,omitempty"`
 	// / config_name indicates the TlsServerConfig to be used for this connection.
 	ConfigName string `protobuf:"bytes,2,opt,name=config_name,json=configName" json:"config_name,omitempty"`

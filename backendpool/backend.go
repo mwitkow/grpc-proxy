@@ -21,10 +21,10 @@ import (
 )
 
 var (
-	ParentDialFunc = net.Dialer{
+	ParentDialFunc = (&net.Dialer{
 		Timeout:   1 * time.Second,
 		KeepAlive: 30 * time.Second,
-	}.DialContext
+	}).DialContext
 	ParentSrvResolver = srv.NewGoResolver(5 * time.Second)
 )
 
@@ -63,8 +63,9 @@ func chooseDialFuncOpt(cnf *pb.Backend) grpc.DialOption {
 	dialFunc := ParentDialFunc
 	if !cnf.DisableConntracking {
 		dialFunc = conntrack.NewDialContextFunc(
-			conntrack.DialWithName(cnf.Name),
+			conntrack.DialWithName("backend_" + cnf.Name),
 			conntrack.DialWithDialContextFunc(dialFunc),
+			conntrack.DialWithTracing(),
 		)
 	}
 	return grpc.WithDialer(func(addr string, t time.Duration) (net.Conn, error) {
