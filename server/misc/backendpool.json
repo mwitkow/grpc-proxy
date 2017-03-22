@@ -1,0 +1,15 @@
+{
+  "backends": [
+    {
+      "name": "controller",
+      "balancer": "ROUND_ROBIN",
+      "interceptors": [
+        { "prometheus": true }
+
+      ],
+      "srv": {
+        "dns_name": "controller.eu1-prod.internal.improbable.io"
+      }
+    }
+  ]
+}

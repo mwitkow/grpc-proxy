@@ -1,0 +1,9 @@
+{
+  "routes": [
+    {
+      "backend_name": "controller",
+      "service_name_matcher": "*",
+      "authority_matcher": "controller.eu1-prod.improbable.local"
+    }
+  ]
+}

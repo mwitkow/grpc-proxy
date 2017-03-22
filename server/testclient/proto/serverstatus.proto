@@ -1,0 +1,47 @@
+// ServerStatus Service.
+//
+// This should be implemented by all Go servers in Improbable.
+
+syntax = "proto3";
+
+package base;
+
+import "google/protobuf/empty.proto";
+
+
+message HealthCheckResponse {
+    bool is_ok = 1;
+}
+
+
+message FlagzState {
+    string name = 1;
+    string help = 2;
+
+    string current_value = 3;
+    string default_value = 4;
+}
+
+message VersionResponse {
+    string hash = 1;
+    string branchname = 2;
+    string date = 3;
+    string go = 4 ;
+    string epoch = 5;
+    string tag = 6;
+}
+
+// Server Status debug service.
+service ServerStatus {
+    // Serves as a simple Healthcheck of the service.
+    rpc HealthCheck (google.protobuf.Empty) returns (HealthCheckResponse) {
+    };
+
+    // Lists all Flagz states for this server.
+    rpc FlagzList (google.protobuf.Empty) returns (stream FlagzState) {
+    };
+
+    // Version returns the git hash and other used when building this server.
+    rpc Version (google.protobuf.Empty) returns (VersionResponse) {
+    };
+}
