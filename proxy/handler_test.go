@@ -99,10 +99,11 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 type ProxyHappySuite struct {
 	suite.Suite
 
-	serverListener net.Listener
-	server         *grpc.Server
-	proxyListener  net.Listener
-	proxy          *grpc.Server
+	serverListener   net.Listener
+	server           *grpc.Server
+	proxyListener    net.Listener
+	proxy            *grpc.Server
+	serverClientConn *grpc.ClientConn
 
 	client     *grpc.ClientConn
 	testClient pb.TestServiceClient
@@ -201,7 +202,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
-	proxyClientConn, err := grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	director := func(ctx context.Context, fullName string) (*grpc.ClientConn, error) {
 		md, ok := metadata.FromContext(ctx)
@@ -210,7 +211,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 				return nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
 			}
 		}
-		return proxyClientConn, nil
+		return s.serverClientConn, nil
 	}
 	s.proxy = grpc.NewServer(
 		grpc.CustomCodec(proxy.Codec()),
@@ -237,6 +238,14 @@ func (s *ProxyHappySuite) SetupSuite() {
 }
 
 func (s *ProxyHappySuite) TearDownSuite() {
+	if s.client != nil {
+		s.client.Close()
+	}
+	if s.serverClientConn != nil {
+		s.serverClientConn.Close()
+	}
+	// Close all transports so the logs don't get spammy.
+	time.Sleep(10 * time.Millisecond)
 	if s.proxy != nil {
 		s.proxy.Stop()
 		s.proxyListener.Close()
@@ -244,9 +253,6 @@ func (s *ProxyHappySuite) TearDownSuite() {
 	if s.serverListener != nil {
 		s.server.Stop()
 		s.serverListener.Close()
-	}
-	if s.client != nil {
-		s.client.Close()
 	}
 }
 
