@@ -121,6 +121,12 @@ func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
 	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
 }
 
+func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
+	for i := 0; i < 50; i++ {
+		s.TestPingEmptyCarriesClientMetadata()
+	}
+}
+
 func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	headerMd := make(metadata.MD)
 	trailerMd := make(metadata.MD)
@@ -175,6 +181,12 @@ func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
 	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
 }
 
+func (s *ProxyHappySuite) TestPingStream_StressTest() {
+	for i := 0; i < 50; i++ {
+		s.TestPingStream_FullDuplexWorks()
+	}
+}
+
 func (s *ProxyHappySuite) SetupSuite() {
 	var err error
 
@@ -224,7 +236,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.testClient = pb.NewTestServiceClient(clientConn)
 }
 
-func (s *ProxyHappySuite) TearDownSuite() {
+func (s *ProxyHappySuite) xTearDownSuite() {
 	if s.proxy != nil {
 		s.proxy.Stop()
 		s.proxyListener.Close()
