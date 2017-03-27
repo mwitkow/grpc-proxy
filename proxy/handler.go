@@ -75,11 +75,11 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
+	// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
+	// Channels do not have to be closed, it is just a control flow mechanism, see
+	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
 	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
 	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
-	// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
-	// See https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
-
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
 		select {

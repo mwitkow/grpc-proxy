@@ -236,7 +236,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.testClient = pb.NewTestServiceClient(clientConn)
 }
 
-func (s *ProxyHappySuite) xTearDownSuite() {
+func (s *ProxyHappySuite) TearDownSuite() {
 	if s.proxy != nil {
 		s.proxy.Stop()
 		s.proxyListener.Close()
