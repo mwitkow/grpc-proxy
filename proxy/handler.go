@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/transport"
 )
 
@@ -65,7 +66,14 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
-	clientCtx, clientCancel := context.WithCancel(serverStream.Context())
+
+	clientCtx := serverStream.Context()
+	md, ok := metadata.FromIncomingContext(clientCtx)
+	if ok {
+		clientCtx = metadata.NewOutgoingContext(clientCtx, md)
+	}
+
+	clientCtx, clientCancel := context.WithCancel(clientCtx)
 	backendConn, err := s.director(serverStream.Context(), fullMethodName)
 	if err != nil {
 		return err
