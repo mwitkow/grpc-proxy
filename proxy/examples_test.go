@@ -6,7 +6,7 @@ package proxy_test
 import (
 	"strings"
 
-	"github.com/mwitkow/grpc-proxy/proxy"
+	"github.com/ddn0/grpc-proxy/proxy"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

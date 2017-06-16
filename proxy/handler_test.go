@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mwitkow/grpc-proxy/proxy"
+	"github.com/ddn0/grpc-proxy/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -24,7 +24,7 @@ import (
 
 	"fmt"
 
-	pb "github.com/mwitkow/grpc-proxy/testservice"
+	pb "github.com/ddn0/grpc-proxy/testservice"
 )
 
 const (
