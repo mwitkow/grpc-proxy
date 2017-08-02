@@ -23,24 +23,27 @@ is a generic gRPC reverse proxy handler.
 The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
 not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
 
-Defining a `StreamDirector` that decides where (if at all) to send the request
+Defining a `StreamDirector` that decides where (if at all) to send the request (see
+example_test.go):
 ```go
-director = func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error) {
-    // Make sure we never forward internal services.
-    if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
-        return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+func (d *ExampleDirector) Connect(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
+  // Make sure we never forward internal services.
+  if strings.HasPrefix(method, "/com.example.internal.") {
+    return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+  }
+  md, ok := metadata.FromContext(ctx)
+  if ok {
+    // Decide on which backend to dial
+    if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
+      // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
+      conn, err := grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+      return ctx, conn, err
+    } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
+      conn, err := grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+      return ctx, conn, err
     }
-    md, ok := metadata.FromContext(ctx)
-    if ok {
-        // Decide on which backend to dial
-        if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
-            // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
-            return grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
-        } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
-            return grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
-        }
-    }
-    return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+  }
+  return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
 Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served

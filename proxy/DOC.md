@@ -67,10 +67,15 @@ ServerOption.
 #### type StreamDirector
 
 ```go
-type StreamDirector func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error)
+type StreamDirector interface {
+	Connect(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error)
+	Release(conn *grpc.ClientConn, method string)
+}
 ```
 
 StreamDirector returns a gRPC ClientConn to be used to forward the call to.
+The Release method provides connection management, allowing the director to
+cache connections.
 
 The presence of the `Context` allows for rich filtering, e.g. based on Metadata
 (headers). If no handling is meant to be done, a `codes.NotImplemented` gRPC
