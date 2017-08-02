@@ -23,7 +23,9 @@ type StreamDirector interface {
 	//
 	// The provided context may be inspected for filtering on request
 	// metadata.
-	Connect(ctx context.Context, method string) (*grpc.ClientConn, error)
+	//
+	// The returned context is used as the basis for the outgoing connection.
+	Connect(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error)
 
 	// Release is called when a connection is longer being used.  This is called
 	// once for every call to Connect that does not return an error.

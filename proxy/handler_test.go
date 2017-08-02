@@ -192,14 +192,14 @@ type checkingDirector struct {
 	conn *grpc.ClientConn
 }
 
-func (c *checkingDirector) Connect(ctx context.Context, method string) (*grpc.ClientConn, error) {
+func (c *checkingDirector) Connect(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		if _, exists := md[rejectingMdKey]; exists {
-			return nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
+			return ctx, nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
 		}
 	}
-	return c.conn, nil
+	return ctx, c.conn, nil
 }
 
 func (c *checkingDirector) Release(conn *grpc.ClientConn, method string) {

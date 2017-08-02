@@ -67,16 +67,18 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
-	backendConn, err := s.director.Connect(serverCtx, fullMethodName)
+	outCtx, backendConn, err := s.director.Connect(serverCtx, fullMethodName)
 	if err != nil {
 		return err
 	}
 	defer s.director.Release(backendConn, fullMethodName)
 
-	// Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientCtx, clientCancel := context.WithCancel(serverCtx)
+	clientCtx, clientCancel := context.WithCancel(outCtx)
 	defer clientCancel()
-	clientCtx = addMetadata(clientCtx, serverCtx)
+	if _, ok := metadata.FromOutgoingContext(outCtx); !ok {
+		// Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
+		clientCtx = addMetadata(clientCtx, outCtx)
+	}
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
@@ -95,7 +97,6 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore./
 				// the clientStream>serverStream may continue pumping though.
 				clientStream.CloseSend()
-				break
 			} else {
 				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
