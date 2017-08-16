@@ -71,7 +71,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
-	defer s.director.Release(backendConn, fullMethodName)
+	defer s.director.Release(outCtx, backendConn)
 
 	clientCtx, clientCancel := context.WithCancel(outCtx)
 	defer clientCancel()

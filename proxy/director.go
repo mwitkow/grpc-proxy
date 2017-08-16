@@ -30,7 +30,9 @@ type StreamDirector interface {
 	// Release is called when a connection is longer being used.  This is called
 	// once for every call to Connect that does not return an error.
 	//
+	// The provided context is the one returned from Connect.
+	//
 	// This can be used by the director to pool connections or close unused
 	// connections.
-	Release(conn *grpc.ClientConn, method string)
+	Release(ctx context.Context, conn *grpc.ClientConn)
 }

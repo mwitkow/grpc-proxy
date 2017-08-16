@@ -57,7 +57,7 @@ func (d *ExampleDirector) Connect(ctx context.Context, method string) (context.C
 	return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 }
 
-func (d *ExampleDirector) Release(conn *grpc.ClientConn, method string) {
+func (d *ExampleDirector) Release(ctx context.Context, conn *grpc.ClientConn) {
 	conn.Close()
 }
 

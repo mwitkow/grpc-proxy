@@ -202,7 +202,7 @@ func (c *checkingDirector) Connect(ctx context.Context, method string) (context.
 	return ctx, c.conn, nil
 }
 
-func (c *checkingDirector) Release(conn *grpc.ClientConn, method string) {
+func (c *checkingDirector) Release(ctx context.Context, conn *grpc.ClientConn) {
 }
 
 func (s *ProxyHappySuite) SetupSuite() {
