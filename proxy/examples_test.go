@@ -42,7 +42,7 @@ func (d *ExampleDirector) Connect(ctx context.Context, method string) (context.C
 	if strings.HasPrefix(method, "/com.example.internal.") {
 		return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 	}
-	md, ok := metadata.FromContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	if ok {
 		// Decide on which backend to dial
 		if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
