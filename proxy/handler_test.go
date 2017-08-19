@@ -46,10 +46,10 @@ type assertingService struct {
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
 	// Check that this call has client's metadata.
-	md, ok := metadata.FromContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	assert.True(s.t, ok, "PingEmpty call must have metadata in context")
 	_, ok = md[clientMdKey]
-	assert.True(s.t, ok, "PingEmpty call must have clients's custom headers in metadata")
+	assert.True(s.t, ok, "PingEmpty call must have clients's custom headers in metadata: %+v", md)
 	return &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, nil
 }
 
@@ -116,7 +116,7 @@ func (s *ProxyHappySuite) ctx() context.Context {
 }
 
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
-	ctx := metadata.NewContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
 	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
@@ -148,7 +148,7 @@ func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
 
 func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 	// See SetupSuite where the StreamDirector has a special case.
-	ctx := metadata.NewContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "Director should reject this RPC")
 	assert.Equal(s.T(), codes.PermissionDenied, grpc.Code(err))
@@ -188,6 +188,23 @@ func (s *ProxyHappySuite) TestPingStream_StressTest() {
 	}
 }
 
+type checkingDirector struct {
+	conn *grpc.ClientConn
+}
+
+func (c *checkingDirector) Connect(ctx context.Context, method string) (context.Context, *grpc.ClientConn, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		if _, exists := md[rejectingMdKey]; exists {
+			return ctx, nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
+		}
+	}
+	return ctx, c.conn, nil
+}
+
+func (c *checkingDirector) Release(ctx context.Context, conn *grpc.ClientConn) {
+}
+
 func (s *ProxyHappySuite) SetupSuite() {
 	var err error
 
@@ -204,15 +221,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	// Setup of the proxy's Director.
 	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (*grpc.ClientConn, error) {
-		md, ok := metadata.FromContext(ctx)
-		if ok {
-			if _, exists := md[rejectingMdKey]; exists {
-				return nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
-			}
-		}
-		return s.serverClientConn, nil
-	}
+	director := &checkingDirector{conn: s.serverClientConn}
 	s.proxy = grpc.NewServer(
 		grpc.CustomCodec(proxy.Codec()),
 		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),

@@ -9,6 +9,8 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/transport"
 )
 
@@ -59,27 +61,34 @@ type handler struct {
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
-	// little bit of gRPC internals never hurt anyone
-	lowLevelServerStream, ok := transport.StreamFromContext(serverStream.Context())
+	serverCtx := serverStream.Context()
+	lowLevelServerStream, ok := transport.StreamFromContext(serverCtx)
 	if !ok {
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
-	clientCtx, clientCancel := context.WithCancel(serverStream.Context())
-	backendConn, err := s.director(serverStream.Context(), fullMethodName)
+	outCtx, backendConn, err := s.director.Connect(serverCtx, fullMethodName)
 	if err != nil {
 		return err
 	}
-	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
+	defer s.director.Release(outCtx, backendConn)
+
+	clientCtx, clientCancel := context.WithCancel(outCtx)
+	defer clientCancel()
+	if _, ok := metadata.FromOutgoingContext(outCtx); !ok {
+		// Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
+		clientCtx = addMetadata(clientCtx, outCtx)
+	}
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
 	}
+
 	// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
 	// Channels do not have to be closed, it is just a control flow mechanism, see
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
-	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
-	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+	s2cErrChan := forwardServerToClient(serverStream, clientStream)
+	c2sErrChan := forwardClientToServer(clientStream, serverStream)
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
 		select {
@@ -88,12 +97,11 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore./
 				// the clientStream>serverStream may continue pumping though.
 				clientStream.CloseSend()
-				break
 			} else {
 				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
-				clientCancel()
+				// clientCancel()
 				return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
 		case c2sErr := <-c2sErrChan:
@@ -111,7 +119,21 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	return grpc.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 }
 
-func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
+func addMetadata(ctx context.Context, serverCtx context.Context) context.Context {
+	source := "unknown"
+	if peer, ok := peer.FromContext(serverCtx); ok && peer.Addr != nil {
+		source = peer.Addr.String()
+	}
+	forwardMD := metadata.Pairs("X-Forwarded-For", source)
+
+	md, ok := metadata.FromIncomingContext(serverCtx)
+	if ok {
+		return metadata.NewOutgoingContext(ctx, metadata.Join(md, forwardMD))
+	}
+	return metadata.NewOutgoingContext(ctx, forwardMD)
+}
+
+func forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
@@ -143,7 +165,7 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 	return ret
 }
 
-func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
+func forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
