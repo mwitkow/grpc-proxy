@@ -65,8 +65,9 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	fullMethodName := lowLevelServerStream.Method()
-	clientCtx, clientCancel := context.WithCancel(serverStream.Context())
-	backendConn, err := s.director(serverStream.Context(), fullMethodName)
+	// We require that the director's returned context inherits from the serverStream.Context().
+	outgoingCtx, backendConn, err := s.director(serverStream.Context(), fullMethodName)
+	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	if err != nil {
 		return err
 	}
