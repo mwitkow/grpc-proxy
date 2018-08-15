@@ -4,7 +4,6 @@
 package proxy
 
 import (
-	"fmt"
 	"io"
 
 	"golang.org/x/net/context"
@@ -61,7 +60,6 @@ type handler struct {
 // It is invoked like any gRPC server stream and uses the gRPC server framing to get and receive bytes from the wire,
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
-	fmt.Println(serverStream.Context())
 	// little bit of gRPC internals never hurt anyone
 	lowLevelServerStream := grpc.ServerTransportStreamFromContext(serverStream.Context())
 	// if !ok {
@@ -74,6 +72,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
+	defer backendConn.Close()
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
