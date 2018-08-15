@@ -9,7 +9,8 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/transport"
+	// "google.golang.org/grpc/transport"
+	// "google.golang.org/grpc/transport"
 )
 
 var (
@@ -60,10 +61,10 @@ type handler struct {
 // forwarding it to a ClientStream established against the relevant ClientConn.
 func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error {
 	// little bit of gRPC internals never hurt anyone
-	lowLevelServerStream, ok := transport.StreamFromContext(serverStream.Context())
-	if !ok {
-		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
-	}
+	lowLevelServerStream := grpc.ServerTransportStreamFromContext(serverStream.Context())
+	// if !ok {
+	// 	return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
+	// }
 	fullMethodName := lowLevelServerStream.Method()
 	// We require that the director's returned context inherits from the serverStream.Context().
 	outgoingCtx, backendConn, err := s.director(serverStream.Context(), fullMethodName)
@@ -71,6 +72,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
+	defer backendConn.Close()
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
