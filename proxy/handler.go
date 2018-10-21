@@ -147,7 +147,7 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
-		for i := 0; ; i++ {
+		for {
 			if err := src.RecvMsg(f); err != nil {
 				ret <- err // this can be io.EOF which is happy case
 				break
