@@ -10,6 +10,11 @@ import (
 const Name = "proto"
 
 func init() {
+	Register()
+}
+
+// Register manually registers the codec
+func Register() {
 	encoding.RegisterCodec(codec())
 }
 
@@ -20,7 +25,7 @@ func codec() encoding.Codec {
 	// since we have registered the default codec by importing it,
 	// we can fetch it from the registry and use it as our parent
 	// and overwrite the existing codec in the registry
-	return codecWithParent(encoding.GetCodec("proto"))
+	return codecWithParent(&protoCodec{})
 }
 
 // CodecWithParent returns a proxying grpc.Codec with a user provided codec as parent.
@@ -44,41 +49,41 @@ type Frame struct {
 }
 
 // Marshal implents the encoding.Codec interface method
-func (c Proxy) Marshal(v interface{}) ([]byte, error) {
+func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 	out, ok := v.(*Frame)
 	if !ok {
-		return c.parentCodec.Marshal(v)
+		return p.parentCodec.Marshal(v)
 	}
 	return out.payload, nil
 
 }
 
 // Unmarshal implents the encoding.Codec interface method
-func (c Proxy) Unmarshal(data []byte, v interface{}) error {
+func (p *Proxy) Unmarshal(data []byte, v interface{}) error {
 	dst, ok := v.(*Frame)
 	if !ok {
-		return c.parentCodec.Unmarshal(data, v)
+		return p.parentCodec.Unmarshal(data, v)
 	}
 	dst.payload = data
 	return nil
 }
 
 // Name implents the encoding.Codec interface method
-func (Proxy) Name() string {
+func (*Proxy) Name() string {
 	return Name
 }
 
 // protoCodec is a Codec implementation with protobuf. It is the default rawCodec for gRPC.
 type protoCodec struct{}
 
-func (protoCodec) Marshal(v interface{}) ([]byte, error) {
+func (*protoCodec) Marshal(v interface{}) ([]byte, error) {
 	return proto.Marshal(v.(proto.Message))
 }
 
-func (protoCodec) Unmarshal(data []byte, v interface{}) error {
+func (*protoCodec) Unmarshal(data []byte, v interface{}) error {
 	return proto.Unmarshal(data, v.(proto.Message))
 }
 
-func (protoCodec) Name() string {
+func (*protoCodec) Name() string {
 	return "proxy>proto"
 }

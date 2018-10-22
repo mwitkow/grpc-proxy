@@ -1,7 +1,6 @@
 package codec_test
 
 import (
-	"reflect"
 	"testing"
 
 	_ "github.com/gogo/protobuf/proto"
@@ -11,15 +10,11 @@ import (
 	"google.golang.org/grpc/encoding"
 )
 
-// trigger init() of proxy/codec package befor tests run
-var _ = codec.Proxy{}
-
 func TestCodec_ReadYourWrites(t *testing.T) {
 	framePtr := &codec.Frame{}
 	data := []byte{0xDE, 0xAD, 0xBE, 0xEF}
-	encoding.RegisterCodec(codec.Proxy{})
-	codec := encoding.GetCodec(codec.Proxy{}.Name())
-	t.Log(reflect.TypeOf(codec).String())
+	codec.Register()
+	codec := encoding.GetCodec((&codec.Proxy{}).Name())
 	require.NotNil(t, codec, "codec must be registered")
 	require.NoError(t, codec.Unmarshal(data, framePtr), "unmarshalling must go ok")
 	out, err := codec.Marshal(framePtr)
@@ -38,7 +33,7 @@ func TestProtoCodec_ReadYourWrites(t *testing.T) {
 	p1 := &pb.PingRequest{
 		Value: "test-ping",
 	}
-	proxyCd := encoding.GetCodec(codec.Proxy{}.Name())
+	proxyCd := encoding.GetCodec((&codec.Proxy{}).Name())
 
 	require.NotNil(t, proxyCd, "proxy codec must not be nil")
 
