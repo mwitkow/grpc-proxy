@@ -52,7 +52,7 @@ func ExampleStreamDirector() {
 				conn, err := grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 				return outCtx, conn, err
 			} else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
-				conn, err := grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithDefaultCallOptions(grpc.CallContentSubtype("grpcproxy>proto")))
+				conn, err := grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())))
 				return outCtx, conn, err
 			}
 		}
