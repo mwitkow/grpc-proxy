@@ -46,7 +46,7 @@ type assertingService struct {
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
 	// Check that this call has client's metadata.
-	md, ok := metadata.FromContext(ctx)
+	md, ok := metadata.FromIncomingContext(ctx)
 	assert.True(s.t, ok, "PingEmpty call must have metadata in context")
 	_, ok = md[clientMdKey]
 	assert.True(s.t, ok, "PingEmpty call must have clients's custom headers in metadata")
@@ -99,10 +99,11 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 type ProxyHappySuite struct {
 	suite.Suite
 
-	serverListener net.Listener
-	server         *grpc.Server
-	proxyListener  net.Listener
-	proxy          *grpc.Server
+	serverListener   net.Listener
+	server           *grpc.Server
+	proxyListener    net.Listener
+	proxy            *grpc.Server
+	serverClientConn *grpc.ClientConn
 
 	client     *grpc.ClientConn
 	testClient pb.TestServiceClient
@@ -115,10 +116,16 @@ func (s *ProxyHappySuite) ctx() context.Context {
 }
 
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
-	ctx := metadata.NewContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
 	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
+}
+
+func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
+	for i := 0; i < 50; i++ {
+		s.TestPingEmptyCarriesClientMetadata()
+	}
 }
 
 func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
@@ -141,7 +148,7 @@ func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
 
 func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 	// See SetupSuite where the StreamDirector has a special case.
-	ctx := metadata.NewContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "Director should reject this RPC")
 	assert.Equal(s.T(), codes.PermissionDenied, grpc.Code(err))
@@ -175,6 +182,12 @@ func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
 	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
 }
 
+func (s *ProxyHappySuite) TestPingStream_StressTest() {
+	for i := 0; i < 50; i++ {
+		s.TestPingStream_FullDuplexWorks()
+	}
+}
+
 func (s *ProxyHappySuite) SetupSuite() {
 	var err error
 
@@ -189,16 +202,19 @@ func (s *ProxyHappySuite) SetupSuite() {
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
-	proxyClientConn, err := grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (*grpc.ClientConn, error) {
-		md, ok := metadata.FromContext(ctx)
+	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
-				return nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
+				return ctx, nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
 			}
 		}
-		return proxyClientConn, nil
+		// Explicitly copy the metadata, otherwise the tests will fail.
+		outCtx, _ := context.WithCancel(ctx)
+		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
+		return outCtx, s.serverClientConn, nil
 	}
 	s.proxy = grpc.NewServer(
 		grpc.CustomCodec(proxy.Codec()),
@@ -225,6 +241,14 @@ func (s *ProxyHappySuite) SetupSuite() {
 }
 
 func (s *ProxyHappySuite) TearDownSuite() {
+	if s.client != nil {
+		s.client.Close()
+	}
+	if s.serverClientConn != nil {
+		s.serverClientConn.Close()
+	}
+	// Close all transports so the logs don't get spammy.
+	time.Sleep(10 * time.Millisecond)
 	if s.proxy != nil {
 		s.proxy.Stop()
 		s.proxyListener.Close()
@@ -232,9 +256,6 @@ func (s *ProxyHappySuite) TearDownSuite() {
 	if s.serverListener != nil {
 		s.server.Stop()
 		s.serverListener.Close()
-	}
-	if s.client != nil {
-		s.client.Close()
 	}
 }
 
