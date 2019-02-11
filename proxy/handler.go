@@ -9,6 +9,8 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 var (
@@ -70,7 +72,18 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	}
 
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
-	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
+	md, ok := metadata.FromIncomingContext(clientCtx)
+	if !ok {
+		return status.Error(codes.Internal, ":authority header has not been set")
+	}
+	authority, ok := md[":authority"]
+	if !ok {
+		return status.Error(codes.Internal, ":authority header has not been set")
+	}
+	md = md.Copy() // metadata is immutable, copy.
+	md["x-forwarded-host"] = authority
+
+	clientCtx = metadata.NewOutgoingContext(clientCtx, md)
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
