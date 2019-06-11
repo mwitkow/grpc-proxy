@@ -35,9 +35,11 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
         // Decide on which backend to dial
         if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
             // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
-            return ctx, grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+            conn, err := grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+            return ctx, conn, err
         } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
-            return ctx, grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+            conn, err := grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+            return ctx, conn, err
         }
     }
     return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
