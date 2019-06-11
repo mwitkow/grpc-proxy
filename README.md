@@ -25,10 +25,10 @@ not know about registered handlers or their data types. Please consult the docs,
 
 Defining a `StreamDirector` that decides where (if at all) to send the request
 ```go
-director = func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error) {
+director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
     // Make sure we never forward internal services.
     if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
-        return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+        return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
     }
     md, ok := metadata.FromIncomingContext(ctx)
     if ok {
@@ -40,7 +40,7 @@ director = func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, e
             return ctx, grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
         }
     }
-    return nil, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+    return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
 Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served
