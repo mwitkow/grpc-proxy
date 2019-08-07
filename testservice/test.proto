@@ -25,5 +25,7 @@ service TestService {
 
   rpc PingStream(stream PingRequest) returns (stream PingResponse) {}
 
+  rpc PingStreamError(stream PingRequest) returns (stream PingResponse) {}
+
 }
 

@@ -61,6 +61,8 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 }
 
 func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*pb.Empty, error) {
+	// Send user headers.
+	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like turtles."))
 	return nil, grpc.Errorf(codes.FailedPrecondition, "Userspace error.")
 }
 
@@ -93,6 +95,12 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I like ending turtles."))
 	return nil
+}
+
+func (s *assertingService) PingStreamError(stream pb.TestService_PingStreamErrorServer) error {
+	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like turtles."))
+
+	return grpc.Errorf(codes.FailedPrecondition, "Userspace error.")
 }
 
 // ProxyHappySuite tests the "happy" path of handling: that everything works in absence of connection issues.
@@ -139,6 +147,15 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
 }
 
+func (s *ProxyHappySuite) TestPingCarriesServerHeadersWhenServerError() {
+	headerMd := metadata.Pairs("bar", "foo")
+	trailerMd := make(metadata.MD)
+	_, err := s.testClient.PingError(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
+	require.Error(s.T(), err, "PingError should never succeed")
+	assert.Equal(s.T(), codes.FailedPrecondition, grpc.Code(err))
+	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
+}
+
 func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
 	_, err := s.testClient.PingError(s.ctx(), &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "PingError should never succeed")
@@ -180,6 +197,23 @@ func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
 	// Check that the trailer headers are here.
 	trailerMd := stream.Trailer()
 	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
+}
+
+func (s *ProxyHappySuite) TestPingStream_FullDuplexWithErrorsAndMetadata() {
+	stream, err := s.testClient.PingStreamError(s.ctx())
+	require.NoError(s.T(), err, "PingStream request should be successful.")
+
+	ping := &pb.PingRequest{Value: "foo:1"}
+	require.NoError(s.T(), stream.Send(ping), "sending to PingStreamError must not fail")
+	// Check that the header arrives.
+	headerMd, err := stream.Header()
+	require.NoError(s.T(), err, "PingStream headers should not error.")
+	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "PingStream response headers user contain metadata")
+
+	_, err = stream.Recv()
+	assert.Equal(s.T(), codes.FailedPrecondition, grpc.Code(err))
+
+	require.NoError(s.T(), stream.CloseSend(), "no error on close send")
 }
 
 func (s *ProxyHappySuite) TestPingStream_StressTest() {
