@@ -207,8 +207,8 @@ func (s *ProxyHappySuite) TestPingStream_FullDuplexWithErrorsAndMetadata() {
 	require.NoError(s.T(), stream.Send(ping), "sending to PingStreamError must not fail")
 	// Check that the header arrives.
 	headerMd, err := stream.Header()
-	require.NoError(s.T(), err, "PingStream headers should not error.")
-	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "PingStream response headers user contain metadata")
+	require.NoError(s.T(), err, "PingStreamError headers should not error.")
+	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "PingStreamError response headers user should contain metadata")
 
 	_, err = stream.Recv()
 	assert.Equal(s.T(), codes.FailedPrecondition, grpc.Code(err))
