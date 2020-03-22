@@ -4,12 +4,10 @@
 package proxy
 
 import (
-	"io"
-	"sync"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"io"
 )
 
 var (
@@ -24,7 +22,7 @@ var (
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
-	streamer := &handler{director: director}
+	streamer := &handler{director}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*interface{})(nil),
@@ -47,14 +45,12 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func TransparentHandler(director StreamDirector) grpc.StreamHandler {
-	streamer := &handler{director: director, sendHeader: false,}
+	streamer := &handler{director}
 	return streamer.handler
 }
 
 type handler struct {
-	director   StreamDirector
-	sendHeader bool
-	sync.Mutex
+	director StreamDirector
 }
 
 // handler is where the real magic of proxying happens.
@@ -83,7 +79,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
 	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
 	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
-	s.forwardClientHeaderToServer(clientStream, serverStream)
+	//s.forwardClientHeaderToServer(clientStream, serverStream)
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
 		select {
@@ -115,36 +111,16 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	return grpc.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 }
 
-func (s *handler) forwardClientHeaderToServer(src grpc.ClientStream, dst grpc.ServerStream, ) chan error {
-	ret := make(chan error, 1)
-	go func() {
-		s.Lock()
-		if !s.sendHeader {
-			md, err := src.Header()
-			if err != nil {
-				ret <- err
-			}
-			if err := dst.SendHeader(md); err != nil {
-				ret <- err
-			}
-			s.sendHeader = true
-		}
-		s.Unlock()
-	}()
-	return ret
-}
-
 func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &frame{}
 		for i := 0; ; i++ {
-			if err := src.RecvMsg(f); err != nil {
-				ret <- err // this can be io.EOF which is happy case
-				break
-			}
-			s.Lock()
-			if i == 0 && !s.sendHeader {
+			if i == 0 {
+				// Because sometimes the client will read the header first
+				// it is necessary to advance the header data exchange to recv.
+				// https://github.com/grpc/grpc-go/blob/master/examples/features/metadata/client/main.go#L212
+
 				// This is a bit of a hack, but client to server headers are only readable after first client msg is
 				// received but must be written to server stream before the first msg is flushed.
 				// This is the only place to do it nicely.
@@ -157,9 +133,11 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 					ret <- err
 					break
 				}
-				s.sendHeader = true
 			}
-			s.Unlock()
+			if err := src.RecvMsg(f); err != nil {
+				ret <- err // this can be io.EOF which is happy case
+				break
+			}
 			if err := dst.SendMsg(f); err != nil {
 				ret <- err
 				break
