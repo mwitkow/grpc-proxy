@@ -52,9 +52,9 @@ func TransparentHandler(director StreamDirector) grpc.StreamHandler {
 }
 
 type handler struct {
-	director   StreamDirector
-	sendHeader bool
-	sync.Locker
+	director       StreamDirector
+	sendHeader     bool
+	sendHeaderLock sync.Mutex
 }
 
 // handler is where the real magic of proxying happens.
