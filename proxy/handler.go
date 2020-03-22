@@ -120,15 +120,15 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 			// https://github.com/grpc/grpc-go/blob/master/examples/features/metadata/client/main.go
 			// line 224
 			if i == 0 {
-				md, err := src.Header()
+				_, err := src.Header()
 				if err != nil {
 					ret <- err
 					break
 				}
-				if err := dst.SendHeader(md); err != nil {
-					ret <- err
-					break
-				}
+				//if err := dst.SendHeader(md); err != nil {
+				//	ret <- err
+				//	break
+				//}
 			}
 			if err := src.RecvMsg(f); err != nil {
 				ret <- err // this can be io.EOF which is happy case
