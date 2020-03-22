@@ -47,14 +47,14 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func TransparentHandler(director StreamDirector) grpc.StreamHandler {
-	streamer := &handler{director: director}
+	streamer := &handler{director: director, sendHeader: false,}
 	return streamer.handler
 }
 
 type handler struct {
-	director       StreamDirector
-	sendHeader     bool
-	sendHeaderLock sync.Mutex
+	director   StreamDirector
+	sendHeader bool
+	sync.Mutex
 }
 
 // handler is where the real magic of proxying happens.
