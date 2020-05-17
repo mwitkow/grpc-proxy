@@ -25,22 +25,24 @@ not know about registered handlers or their data types. Please consult the docs,
 
 Defining a `StreamDirector` that decides where (if at all) to send the request
 ```go
-director = func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error) {
+director := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
     // Make sure we never forward internal services.
     if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
-        return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+        return ctx, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
     }
-    md, ok := metadata.FromContext(ctx)
+    md, ok := metadata.FromIncomingContext(ctx)
     if ok {
         // Decide on which backend to dial
         if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
             // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
-            return grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+            c, err := grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()),grpc.WithInsecure())
+            return ctx, c, err
         } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
-            return grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+            c, err := grpc.DialContext(ctx, "localhost:50055", grpc.WithCodec(proxy.Codec()),grpc.WithInsecure())
+            return ctx, c, err
         }
     }
-    return nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+    return ctx, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
 Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served

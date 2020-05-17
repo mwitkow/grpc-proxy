@@ -4,11 +4,10 @@
 package proxy
 
 import (
-	"io"
-
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"io"
 )
 
 var (
@@ -68,7 +67,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	if err != nil {
 		return err
 	}
-
+	defer backendConn.Close()
+	
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
@@ -80,6 +80,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
 	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
 	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+	//s.forwardClientHeaderToServer(clientStream, serverStream)
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
 		select {
@@ -116,11 +117,11 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 	go func() {
 		f := &frame{}
 		for i := 0; ; i++ {
-			if err := src.RecvMsg(f); err != nil {
-				ret <- err // this can be io.EOF which is happy case
-				break
-			}
 			if i == 0 {
+				// Because sometimes the client will read the header first
+				// it is necessary to advance the header data exchange to recv.
+				// https://github.com/grpc/grpc-go/blob/master/examples/features/metadata/client/main.go#L212
+
 				// This is a bit of a hack, but client to server headers are only readable after first client msg is
 				// received but must be written to server stream before the first msg is flushed.
 				// This is the only place to do it nicely.
@@ -133,6 +134,10 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 					ret <- err
 					break
 				}
+			}
+			if err := src.RecvMsg(f); err != nil {
+				ret <- err // this can be io.EOF which is happy case
+				break
 			}
 			if err := dst.SendMsg(f); err != nil {
 				ret <- err
