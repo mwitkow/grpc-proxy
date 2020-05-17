@@ -10,6 +10,7 @@ import (
 // Codec returns a proxying grpc.Codec with the default protobuf codec as parent.
 //
 // See CodecWithParent.
+// 构建输出函数
 func Codec() grpc.Codec {
 	return CodecWithParent(&protoCodec{})
 }
@@ -32,6 +33,7 @@ type frame struct {
 	payload []byte
 }
 
+//构建原始字节解码器
 func (c *rawCodec) Marshal(v interface{}) ([]byte, error) {
 	out, ok := v.(*frame)
 	if !ok {
@@ -55,6 +57,7 @@ func (c *rawCodec) String() string {
 }
 
 // protoCodec is a Codec implementation with protobuf. It is the default rawCodec for gRPC.
+// 构建proto解码器
 type protoCodec struct{}
 
 func (protoCodec) Marshal(v interface{}) ([]byte, error) {
