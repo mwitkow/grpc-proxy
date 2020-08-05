@@ -4,6 +4,7 @@
 package proxy_test
 
 import (
+	"google.golang.org/grpc/encoding"
 	"io"
 	"log"
 	"net"
@@ -36,6 +37,10 @@ const (
 	rejectingMdKey = "test-reject-rpc-if-in-context"
 
 	countListResponses = 20
+)
+
+var (
+	examplePool *proxy.Pool
 )
 
 // asserting service is implemented on the server side and serves as a handler for stuff
@@ -103,7 +108,7 @@ type ProxyHappySuite struct {
 	server           *grpc.Server
 	proxyListener    net.Listener
 	proxy            *grpc.Server
-	serverClientConn *grpc.ClientConn
+	serverClientConn *proxy.PoolConn
 
 	client     *grpc.ClientConn
 	testClient pb.TestServiceClient
@@ -201,10 +206,13 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.server = grpc.NewServer()
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
+	// init grpc conn pool
+	examplePool = proxy.NewPool(300, time.Duration(60000)*time.Millisecond, 500, 500)
 	// Setup of the proxy's Director.
-	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	s.serverClientConn, err = examplePool.GetConn("api-service.staging.svc.local", grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.Codec())),
+		grpc.WithInsecure())
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
+	director := func(ctx context.Context, fullName string) (context.Context, *proxy.PoolConn, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
@@ -216,8 +224,8 @@ func (s *ProxyHappySuite) SetupSuite() {
 		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
 		return outCtx, s.serverClientConn, nil
 	}
+	encoding.RegisterCodec(proxy.Codec())
 	s.proxy = grpc.NewServer(
-		grpc.CustomCodec(proxy.Codec()),
 		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.

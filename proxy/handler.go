@@ -4,6 +4,7 @@
 package proxy
 
 import (
+	"google.golang.org/grpc/status"
 	"io"
 
 	"golang.org/x/net/context"
@@ -61,7 +62,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	// little bit of gRPC internals never hurt anyone
 	fullMethodName, ok := grpc.MethodFromServerStream(serverStream)
 	if !ok {
-		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
+		return status.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	// We require that the director's returned context inherits from the serverStream.Context().
 	outgoingCtx, backendConn, err := s.director(serverStream.Context(), fullMethodName)
@@ -69,9 +70,16 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 		return err
 	}
 
+	defer func() {
+		// defer execution of release
+		if backendConn != nil {
+			backendConn.Close()
+		}
+	}()
+
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn.ClientConn, fullMethodName)
 	if err != nil {
 		return err
 	}
@@ -94,7 +102,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
 				clientCancel()
-				return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
+				return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
 		case c2sErr := <-c2sErrChan:
 			// This happens when the clientStream has nothing else to offer (io.EOF), returned a gRPC error. In those two
@@ -108,7 +116,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			return nil
 		}
 	}
-	return grpc.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
+	return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 }
 
 func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
