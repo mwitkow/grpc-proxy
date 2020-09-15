@@ -4,7 +4,6 @@
 package proxy_test
 
 import (
-	"google.golang.org/grpc/encoding"
 	"io"
 	"log"
 	"net"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/encoding"
 
 	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/stretchr/testify/assert"

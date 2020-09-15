@@ -2,19 +2,20 @@ package proxy
 
 import (
 	"fmt"
+
 	"google.golang.org/grpc/encoding"
 
 	"github.com/golang/protobuf/proto"
 )
 
-// Codec returns a proxying grpc.Codec with the default protobuf codec as parent.
+// Codec returns a proxying encoding.Codec with the default protobuf codec as parent.
 //
 // See CodecWithParent.
 func Codec() encoding.Codec {
 	return CodecWithParent(&protoCodec{})
 }
 
-// CodecWithParent returns a proxying grpc.Codec with a user provided codec as parent.
+// CodecWithParent returns a proxying encoding.Codec with a user provided codec as parent.
 //
 // This codec is *crucial* to the functioning of the proxy. It allows the proxy server to be oblivious
 // to the schema of the forwarded messages. It basically treats a gRPC message frame as raw bytes.

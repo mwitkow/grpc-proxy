@@ -4,8 +4,9 @@
 package proxy
 
 import (
-	"google.golang.org/grpc/status"
 	"io"
+
+	"google.golang.org/grpc/status"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"

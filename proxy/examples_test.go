@@ -4,11 +4,12 @@
 package proxy_test
 
 import (
+	"strings"
+	"time"
+
 	"github.com/mwitkow/grpc-proxy/proxy"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/status"
-	"strings"
-	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
