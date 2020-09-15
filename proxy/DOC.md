@@ -19,18 +19,19 @@ See examples on documented functions.
 #### func  Codec
 
 ```go
-func Codec() grpc.Codec
+func Codec() encoding.Codec
 ```
-Codec returns a proxying grpc.Codec with the default protobuf codec as parent.
+Codec returns a proxying encoding.Codec with the default protobuf codec as
+parent.
 
 See CodecWithParent.
 
 #### func  CodecWithParent
 
 ```go
-func CodecWithParent(fallback grpc.Codec) grpc.Codec
+func CodecWithParent(fallback encoding.Codec) encoding.Codec
 ```
-CodecWithParent returns a proxying grpc.Codec with a user provided codec as
+CodecWithParent returns a proxying encoding.Codec with a user provided codec as
 parent.
 
 This codec is *crucial* to the functioning of the proxy. It allows the proxy
@@ -64,10 +65,53 @@ backends. It should be used as a `grpc.UnknownServiceHandler`.
 This can *only* be used if the `server` also uses grpcproxy.CodecForServer()
 ServerOption.
 
+#### type Pool
+
+```go
+type Pool struct {
+	sync.Mutex
+}
+```
+
+
+#### func  NewPool
+
+```go
+func NewPool(size int, ttl time.Duration, idle int, ms int) *Pool
+```
+
+#### func (*Pool) GetConn
+
+```go
+func (p *Pool) GetConn(addr string, opts ...grpc.DialOption) (*PoolConn, error)
+```
+
+#### func (*Pool) Release
+
+```go
+func (p *Pool) Release(addr string, conn *PoolConn, err error)
+```
+
+#### type PoolConn
+
+```go
+type PoolConn struct {
+	//  grpc conn
+	*grpc.ClientConn
+}
+```
+
+
+#### func (*PoolConn) Close
+
+```go
+func (conn *PoolConn) Close()
+```
+
 #### type StreamDirector
 
 ```go
-type StreamDirector func(ctx context.Context, fullMethodName string) (*grpc.ClientConn, error)
+type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *PoolConn, error)
 ```
 
 StreamDirector returns a gRPC ClientConn to be used to forward the call to.
@@ -75,6 +119,12 @@ StreamDirector returns a gRPC ClientConn to be used to forward the call to.
 The presence of the `Context` allows for rich filtering, e.g. based on Metadata
 (headers). If no handling is meant to be done, a `codes.NotImplemented` gRPC
 error should be returned.
+
+The context returned from this function should be the context for the *outgoing*
+(to backend) call. In case you want to forward any Metadata between the inbound
+request and outbound requests, you should do it manually. However, you *must*
+propagate the cancel function (`context.WithCancel`) of the inbound context to
+the one returned.
 
 It is worth noting that the StreamDirector will be fired *after* all server-side
 stream interceptors are invoked. So decisions around authorization, monitoring

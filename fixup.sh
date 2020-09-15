@@ -14,7 +14,7 @@ function generate_markdown {
         dir=${i%/*}
         echo "$dir"
         cd ${dir}
-        ${GOPATH}/bin/godocdown -heading=Title -o DOC.md
+        godocdown -heading=Title -o DOC.md #`go get github.com/robertkrimen/godocdown/godocdown` to install godocdown
         ln -s DOC.md README.md 2> /dev/null # can fail
         cd ${oldpwd}
     done;
