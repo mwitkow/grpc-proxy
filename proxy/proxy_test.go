@@ -60,8 +60,9 @@ func TestLegacyBehaviour(t *testing.T) {
 		})
 	}()
 
-	// 3. Connect to the proxy. We should not need any kind of special config to
-	//    do this, as this is how users connect to the proxy.
+	// 3.
+	// Connect to the proxy. We should not need to do anything special here -
+	// users do not need to know they're talking to a proxy.
 	proxyCC, err := grpc.Dial(
 		"bufnet",
 		grpc.WithInsecure(),
@@ -117,8 +118,9 @@ func TestNewProxy(t *testing.T) {
 		})
 	}()
 
-	// 3. Connect to the proxy. We should not need any kind of special config to
-	//    do this, as this is how users connect to the proxy.
+	// 3.
+	// Connect to the proxy. We should not need to do anything special here -
+	// users do not need to know they're talking to a proxy.
 	t.Logf("dialing %s", proxyBc.Addr())
 	proxyCC, err := grpc.Dial(
 		proxyBc.Addr().String(),
@@ -137,6 +139,8 @@ func TestNewProxy(t *testing.T) {
 	testservice.TestTestServiceServerImpl(t, proxyClient)
 }
 
+// backendDialer dials the testservice.TestServiceServer either by connecting
+// to the user-supplied server, or by creating a mock server using bufconn.
 func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	t.Helper()
 

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-// NewProxy sets up a working proxy that forwards all requests to dst.
+// NewProxy sets up a simple proxy that forwards all requests to dst.
 func NewProxy(dst *grpc.ClientConn, opts ...grpc.ServerOption) *grpc.Server {
 	opts = append(opts, DefaultProxyOpt(dst))
 	// Set up the proxy server and then serve from it like in step one.

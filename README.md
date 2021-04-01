@@ -23,12 +23,13 @@ is a generic gRPC reverse proxy handler.
 The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
 not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
 
-If you simply want a "dumb" proxy, you can call `proxy.NewProxy` to create a `*grpc.Server` that you can start.
+You can call `proxy.NewProxy` to create a `*grpc.Server` that proxies requests.
 ```go
 proxy := proxy.NewProxy(clientConn)
 ``` 
 
-Defining a `StreamDirector` that decides where (if at all) to send the request
+More advanced users will want to define a `StreamDirector` that can make more complex decisions on what
+to do with the request.
 ```go
 director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
     md, _ := metadata.FromIncomingContext(ctx)
@@ -52,8 +53,9 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
     return outCtx, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
+
 Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served
-locally:
+locally.
 
 ```go
 server := grpc.NewServer(
@@ -65,8 +67,8 @@ pb_test.RegisterTestServiceServer(server, &testImpl{})
 ## Testing
 To make debugging a bit simpler, there are some helpers.
 
-`/testservice` contains a method `TestTestServiceServerImpl` which accepts a client connection. 
-This may be called to verify that a proxy implementation works as expected.
+`testservice` contains a method `TestTestServiceServerImpl` which performs a complete test against
+the reference implementation of the `TestServiceServer`.
 
 In `proxy_test.go`, the test framework spins up a `TestServiceServer` that it tests the proxy 
 against. To make debugging a bit simpler (eg. if the developer needs to step into 
