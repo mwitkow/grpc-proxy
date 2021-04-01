@@ -11,14 +11,7 @@ import (
 )
 
 const (
-	pingDefaultValue   = "I like kittens."
-	clientMdKey        = "test-client-header"
 	returnHeader  = "test-client-header"
-	serverTrailerMdKey = "test-client-trailer"
-
-	rejectingMdKey = "test-reject-rpc-if-in-context"
-
-	countListResponses = 20
 )
 
 // TestTestServiceServerImpl can be called to test the underlying TestServiceServer.

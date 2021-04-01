@@ -38,7 +38,7 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
 	
     // Make sure we never forward internal services.
     if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
-        return outCtx, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+        return outCtx, nil, status.Errorf(codes.Unimplemented, "Unknown method")
     }
     
     if ok {
@@ -50,7 +50,7 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
             return outCtx, grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec())), nil
         }
     }
-    return outCtx, nil, grpc.Errorf(codes.Unimplemented, "Unknown method")
+    return outCtx, nil, status.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
 

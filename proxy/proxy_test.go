@@ -25,6 +25,7 @@ func TestLegacyBehaviour(t *testing.T) {
 	// 3. Make calls to 1 via 2.
 
 	// 1.
+	//lint:ignore SA1019 regression test
 	testCC, err := backendDialer(t, grpc.WithCodec(Codec()))
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +42,7 @@ func TestLegacyBehaviour(t *testing.T) {
 
 		// Set up the proxy server and then serve from it like in step one.
 		proxySrv := grpc.NewServer(
+			//lint:ignore SA1019 regression test
 			grpc.CustomCodec(Codec()), // was previously needed for proxy to function.
 			grpc.UnknownServiceHandler(TransparentHandler(directorFn)),
 		)

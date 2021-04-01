@@ -11,14 +11,14 @@ import (
 //
 // See CodecWithParent.
 //
-// Deprecated. This is no longer used anywhere.
+// Deprecated: No longer necessary.
 func Codec() grpc.Codec {
 	return CodecWithParent(&protoCodec{})
 }
 
 // CodecWithParent returns a proxying grpc.Codec with a user provided codec as parent.
 //
-// Deprecated. This is no longer used anywhere.
+// Deprecated: No longer necessary.
 func CodecWithParent(fallback grpc.Codec) grpc.Codec {
 	return &rawCodec{fallback}
 }
