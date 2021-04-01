@@ -1,4 +1,4 @@
-.PHONY: test
+.PHONY: test test-ci install-staticcheck
 
 test:
 	go vet ./...
