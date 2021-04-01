@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	returnHeader  = "test-client-header"
+	returnHeader = "test-client-header"
 )
 
 // TestTestServiceServerImpl can be called to test the underlying TestServiceServer.

@@ -7,4 +7,4 @@ install:
   - go get ./...
 
 script:
- - make test
+ - make test-ci

@@ -38,7 +38,7 @@ const (
 
 // asserting service is implemented on the server side and serves as a handler for stuff
 type assertingService struct {
-	t      *testing.T
+	t *testing.T
 	pb.UnsafeTestServiceServer
 }
 
