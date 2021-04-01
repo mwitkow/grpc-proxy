@@ -1,28 +1,26 @@
 // Copyright 2017 Michal Witkowski. All Rights Reserved.
 // See LICENSE for licensing terms.
 
-package proxy_test
+package proxy
 
 import (
+	"context"
+	"fmt"
 	"io"
-	"log"
 	"net"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
-
-	"fmt"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	pb "github.com/mwitkow/grpc-proxy/testservice"
 )
@@ -40,11 +38,14 @@ const (
 
 // asserting service is implemented on the server side and serves as a handler for stuff
 type assertingService struct {
-	logger *grpclog.Logger
+	logger *grpclog.LoggerV2
 	t      *testing.T
+	pb.UnsafeTestServiceServer
 }
 
-func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
+var _ pb.TestServiceServer = (*assertingService)(nil)
+
+func (s *assertingService) PingEmpty(ctx context.Context, _ *emptypb.Empty) (*pb.PingResponse, error) {
 	// Check that this call has client's metadata.
 	md, ok := metadata.FromIncomingContext(ctx)
 	assert.True(s.t, ok, "PingEmpty call must have metadata in context")
@@ -60,7 +61,7 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	return &pb.PingResponse{Value: ping.Value, Counter: 42}, nil
 }
 
-func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*pb.Empty, error) {
+func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*emptypb.Empty, error) {
 	return nil, grpc.Errorf(codes.FailedPrecondition, "Userspace error.")
 }
 
@@ -117,9 +118,10 @@ func (s *ProxyHappySuite) ctx() context.Context {
 
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
 	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
-	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
+	out, err := s.testClient.PingEmpty(ctx, &emptypb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
+	want := &pb.PingResponse{Value: pingDefaultValue, Counter: 42}
+	require.True(s.T(), proto.Equal(want, out))
 }
 
 func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
@@ -133,8 +135,9 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	trailerMd := make(metadata.MD)
 	// This is an awkward calling convention... but meh.
 	out, err := s.testClient.Ping(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
+	want := &pb.PingResponse{Value: "foo", Counter: 42}
 	require.NoError(s.T(), err, "Ping should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: "foo", Counter: 42}, out)
+	require.True(s.T(), proto.Equal(want, out))
 	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
 }
@@ -196,13 +199,11 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.serverListener, err = net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
 
-	grpclog.SetLogger(log.New(os.Stderr, "grpc: ", log.LstdFlags))
-
 	s.server = grpc.NewServer()
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
-	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -217,11 +218,11 @@ func (s *ProxyHappySuite) SetupSuite() {
 		return outCtx, s.serverClientConn, nil
 	}
 	s.proxy = grpc.NewServer(
-		grpc.CustomCodec(proxy.Codec()),
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+		grpc.CustomCodec(Codec()),
+		grpc.UnknownServiceHandler(TransparentHandler(director)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
-	proxy.RegisterService(s.proxy, director,
+	RegisterService(s.proxy, director,
 		"mwitkow.testproto.TestService",
 		"Ping")
 
@@ -261,25 +262,4 @@ func (s *ProxyHappySuite) TearDownSuite() {
 
 func TestProxyHappySuite(t *testing.T) {
 	suite.Run(t, &ProxyHappySuite{})
-}
-
-// Abstraction that allows us to pass the *testing.T as a grpclogger.
-type testingLog struct {
-	testing.T
-}
-
-func (t *testingLog) Fatalln(args ...interface{}) {
-	t.T.Fatal(args...)
-}
-
-func (t *testingLog) Print(args ...interface{}) {
-	t.T.Log(args...)
-}
-
-func (t *testingLog) Printf(format string, args ...interface{}) {
-	t.T.Logf(format, args...)
-}
-
-func (t *testingLog) Println(args ...interface{}) {
-	t.T.Log(args...)
 }
