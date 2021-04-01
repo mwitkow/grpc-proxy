@@ -50,8 +50,7 @@ func ExampleStreamDirector() {
 		}
 		md, ok := metadata.FromIncomingContext(ctx)
 		// Copy the inbound metadata explicitly.
-		outCtx, _ := context.WithCancel(ctx)
-		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
+		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 		if ok {
 			// Decide on which backend to dial
 			if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {

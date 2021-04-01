@@ -69,12 +69,11 @@ To make debugging a bit simpler, there are some helpers.
 which accepts a client connection. This may be called to verify that a proxy implementation
 works as expected.`
 
-In `end_to_end_test.go` and `end_to_endv2_test.go`, the test framework spins up a
-`TestServiceServer` that it tests the proxy against. To make debugging a bit simpler (eg. if
-the developer needs to step into `google.golang.org/grpc` methods), this
-`TestServiceServer` can be provided by a server by passing `-test-backend=addr` to `go test`.
-A simple, local-only implementation of `TestServiceServer` exists in
-[`testservice/server`](./testservice/server).
+In `proxy_test.go`, the test framework spins up a `TestServiceServer` that it tests the proxy 
+against. To make debugging a bit simpler (eg. if the developer needs to step into 
+`google.golang.org/grpc` methods), this `TestServiceServer` can be provided by a server by 
+passing `-test-backend=addr` to `go test`. A simple, local-only implementation of 
+`TestServiceServer` exists in [`testservice/server`](./testservice/server).
 
 
 ## License

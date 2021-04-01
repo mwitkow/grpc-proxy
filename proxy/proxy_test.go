@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"testing"
 
@@ -24,24 +25,23 @@ func TestLegacyBehaviour(t *testing.T) {
 	// 3. Make calls to 1 via 2.
 
 	// 1.
-	testCC := backendDialer(t, grpc.WithCodec(Codec()))
+	testCC, err := backendDialer(t, grpc.WithCodec(Codec()))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 2.
 	go func() {
 		// Second, we need to implement the SteamDirector.
-		// not quite the canonical example, as it sees to be broken?
-		// TODO(marcusirgens): Fix the documentation.
 		directorFn := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
 			md, _ := metadata.FromIncomingContext(ctx)
-			outCtx, _ := context.WithCancel(ctx)
-			mdCopy := md.Copy()
-			outCtx = metadata.NewOutgoingContext(outCtx, mdCopy)
+			outCtx := metadata.NewOutgoingContext(ctx,  md.Copy())
 			return outCtx, testCC, nil
 		}
 
 		// Set up the proxy server and then serve from it like in step one.
 		proxySrv := grpc.NewServer(
-			grpc.CustomCodec(Codec()), // needed for proxy to function.
+			grpc.CustomCodec(Codec()), // was previously needed for proxy to function.
 			grpc.UnknownServiceHandler(TransparentHandler(directorFn)),
 		)
 		// run the proxy backend
@@ -51,7 +51,7 @@ func TestLegacyBehaviour(t *testing.T) {
 				if err == grpc.ErrServerStopped {
 					return
 				}
-				t.Fatalf("running proxy server: %v", err)
+				t.Logf("running proxy server: %v", err)
 			}
 		}()
 		t.Cleanup(func() {
@@ -89,7 +89,10 @@ func TestNewProxy(t *testing.T) {
 
 	// 1.
 	// First, we need to create a client connection to this backend.
-	testCC := backendDialer(t)
+	testCC, err := backendDialer(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 2.
 	go func() {
@@ -105,7 +108,7 @@ func TestNewProxy(t *testing.T) {
 				if err == grpc.ErrServerStopped {
 					return
 				}
-				t.Fatalf("running proxy server: %v", err)
+				t.Logf("running proxy server: %v", err)
 			}
 		}()
 		t.Cleanup(func() {
@@ -134,7 +137,7 @@ func TestNewProxy(t *testing.T) {
 	testservice.TestTestServiceServerImpl(t, proxyClient)
 }
 
-func backendDialer(t *testing.T, opts ...grpc.DialOption) *grpc.ClientConn {
+func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	t.Helper()
 
 	if *testBackend != "" {
@@ -153,7 +156,7 @@ func backendDialer(t *testing.T, opts ...grpc.DialOption) *grpc.ClientConn {
 			if err == grpc.ErrServerStopped {
 				return
 			}
-			t.Fatalf("running test server: %v", err)
+			t.Logf("running test server: %v", err)
 		}
 	}()
 	t.Cleanup(func() {
@@ -174,12 +177,12 @@ func backendDialer(t *testing.T, opts ...grpc.DialOption) *grpc.ClientConn {
 		opts...,
 	)
 	if err != nil {
-		t.Fatalf("dialing backend: %v", err)
+		return nil, fmt.Errorf("dialing backend: %v", err)
 	}
-	return backendCC
+	return backendCC, nil
 }
 
-func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) *grpc.ClientConn {
+func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts = append(opts,
 		grpc.WithInsecure(),
 		grpc.WithBlock(),
@@ -191,7 +194,8 @@ func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) *grpc.
 		opts...,
 	)
 	if err != nil {
-		t.Fatalf("dialing backend: %v", err)
+		return nil, fmt.Errorf("dialing backend: %v", err)
 	}
-	return cc
+
+	return cc, nil
 }

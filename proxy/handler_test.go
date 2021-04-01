@@ -110,14 +110,8 @@ type ProxyHappySuite struct {
 	testClient pb.TestServiceClient
 }
 
-func (s *ProxyHappySuite) ctx() context.Context {
-	// Make all RPC calls last at most 1 sec, meaning all async issues or deadlock will not kill tests.
-	ctx, _ := context.WithTimeout(context.TODO(), 120*time.Second)
-	return ctx
-}
-
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
-	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &emptypb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
 	want := &pb.PingResponse{Value: pingDefaultValue, Counter: 42}
@@ -134,7 +128,7 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	headerMd := make(metadata.MD)
 	trailerMd := make(metadata.MD)
 	// This is an awkward calling convention... but meh.
-	out, err := s.testClient.Ping(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
+	out, err := s.testClient.Ping(context.Background(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
 	want := &pb.PingResponse{Value: "foo", Counter: 42}
 	require.NoError(s.T(), err, "Ping should succeed without errors")
 	require.True(s.T(), proto.Equal(want, out))
@@ -143,7 +137,7 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 }
 
 func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
-	_, err := s.testClient.PingError(s.ctx(), &pb.PingRequest{Value: "foo"})
+	_, err := s.testClient.PingError(context.Background(), &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "PingError should never succeed")
 	assert.Equal(s.T(), codes.FailedPrecondition, grpc.Code(err))
 	assert.Equal(s.T(), "Userspace error.", grpc.ErrorDesc(err))
@@ -151,7 +145,7 @@ func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
 
 func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 	// See SetupSuite where the StreamDirector has a special case.
-	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(rejectingMdKey, "true"))
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "Director should reject this RPC")
 	assert.Equal(s.T(), codes.PermissionDenied, grpc.Code(err))
@@ -159,7 +153,7 @@ func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 }
 
 func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
-	stream, err := s.testClient.PingStream(s.ctx())
+	stream, err := s.testClient.PingStream(context.Background())
 	require.NoError(s.T(), err, "PingStream request should be successful.")
 
 	for i := 0; i < countListResponses; i++ {
@@ -213,8 +207,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 			}
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
-		outCtx, _ := context.WithCancel(ctx)
-		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
+		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 		return outCtx, s.serverClientConn, nil
 	}
 	s.proxy = grpc.NewServer(

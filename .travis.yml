@@ -1,13 +1,10 @@
 sudo: false
 language: go
 go:
-  - 1.7
-  - 1.8
+  - "1.14"
 
 install:
-  - go get google.golang.org/grpc
-  - go get golang.org/x/net/context
-  - go get github.com/stretchr/testify
+  - go get ./...
 
 script:
- - go test -race -v ./...
+ - make test
