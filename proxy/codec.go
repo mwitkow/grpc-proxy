@@ -9,7 +9,7 @@ import (
 
 // Codec returns a proxying grpc.Codec with the default protobuf codec as parent.
 //
-// See CodecWithParent.
+// Deprecated
 func Codec() grpc.Codec {
 	return CodecWithParent(&protoCodec{})
 }
@@ -20,6 +20,8 @@ func Codec() grpc.Codec {
 // to the schema of the forwarded messages. It basically treats a gRPC message frame as raw bytes.
 // However, if the server handler, or the client caller are not proxy-internal functions it will fall back
 // to trying to decode the message using a fallback codec.
+//
+// Deprecated
 func CodecWithParent(fallback grpc.Codec) grpc.Codec {
 	return &rawCodec{fallback}
 }
