@@ -65,9 +65,8 @@ pb_test.RegisterTestServiceServer(server, &testImpl{})
 ## Testing
 To make debugging a bit simpler, there are some helpers.
 
-`github.com/mwitkow/grpc-proxy/testservice contains a method `TestTestServiceServerImpl`
-which accepts a client connection. This may be called to verify that a proxy implementation
-works as expected.`
+`/testservice` contains a method `TestTestServiceServerImpl` which accepts a client connection. 
+This may be called to verify that a proxy implementation works as expected.
 
 In `proxy_test.go`, the test framework spins up a `TestServiceServer` that it tests the proxy 
 against. To make debugging a bit simpler (eg. if the developer needs to step into 
