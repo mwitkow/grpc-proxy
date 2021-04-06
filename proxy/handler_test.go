@@ -1,7 +1,7 @@
 // Copyright 2017 Michal Witkowski. All Rights Reserved.
 // See LICENSE for licensing terms.
 
-package proxy
+package proxy_test
 
 import (
 	"context"
@@ -22,6 +22,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/mwitkow/grpc-proxy/proxy"
 	pb "github.com/mwitkow/grpc-proxy/testservice"
 )
 
@@ -197,7 +198,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 
 	// Setup of the proxy's Director.
 	//lint:ignore SA1019 regression test
-	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(Codec()))
+	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -212,11 +213,11 @@ func (s *ProxyHappySuite) SetupSuite() {
 	}
 	s.proxy = grpc.NewServer(
 		//lint:ignore SA1019 regression test
-		grpc.CustomCodec(Codec()),
-		grpc.UnknownServiceHandler(TransparentHandler(director)),
+		grpc.CustomCodec(proxy.Codec()),
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
-	RegisterService(s.proxy, director,
+	proxy.RegisterService(s.proxy, director,
 		"mwitkow.testproto.TestService",
 		"Ping")
 

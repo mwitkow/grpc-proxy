@@ -1,12 +1,14 @@
 // Copyright 2017 Michal Witkowski. All Rights Reserved.
 // See LICENSE for licensing terms.
 
-package proxy
+package proxy_test
 
 import (
 	"context"
 	"log"
 	"strings"
+
+	"github.com/mwitkow/grpc-proxy/proxy"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -15,7 +17,7 @@ import (
 )
 
 var (
-	director StreamDirector
+	director proxy.StreamDirector
 )
 
 func ExampleNewProxy() {
@@ -23,7 +25,7 @@ func ExampleNewProxy() {
 	if err != nil {
 		log.Fatalf("dialing example.org: %v", err)
 	}
-	proxy := NewProxy(dst)
+	proxy := proxy.NewProxy(dst)
 	_ = proxy
 }
 
@@ -31,14 +33,14 @@ func ExampleRegisterService() {
 	// A gRPC server with the proxying codec enabled.
 	server := grpc.NewServer()
 	// Register a TestService with 4 of its methods explicitly.
-	RegisterService(server, director,
+	proxy.RegisterService(server, director,
 		"mwitkow.testproto.TestService",
 		"PingEmpty", "Ping", "PingError", "PingList")
 }
 
 func ExampleTransparentHandler() {
 	grpc.NewServer(
-		grpc.UnknownServiceHandler(TransparentHandler(director)))
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)))
 }
 
 // Provides a simple example of a director that shields internal services and dials a staging or production backend.

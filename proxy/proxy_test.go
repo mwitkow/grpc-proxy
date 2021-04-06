@@ -1,7 +1,8 @@
-package proxy
+package proxy_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net"
 	"testing"
@@ -10,8 +11,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/test/bufconn"
 
+	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/mwitkow/grpc-proxy/testservice"
 )
+
+var testBackend = flag.String("test-backend", "", "Service providing TestServiceServer")
 
 // TestIntegrationV1 is a regression test of the proxy.
 func TestLegacyBehaviour(t *testing.T) {
@@ -26,7 +30,7 @@ func TestLegacyBehaviour(t *testing.T) {
 
 	// 1.
 	//lint:ignore SA1019 regression test
-	testCC, err := backendDialer(t, grpc.WithCodec(Codec()))
+	testCC, err := backendDialer(t, grpc.WithCodec(proxy.Codec()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,8 +47,8 @@ func TestLegacyBehaviour(t *testing.T) {
 		// Set up the proxy server and then serve from it like in step one.
 		proxySrv := grpc.NewServer(
 			//lint:ignore SA1019 regression test
-			grpc.CustomCodec(Codec()), // was previously needed for proxy to function.
-			grpc.UnknownServiceHandler(TransparentHandler(directorFn)),
+			grpc.CustomCodec(proxy.Codec()), // was previously needed for proxy to function.
+			grpc.UnknownServiceHandler(proxy.TransparentHandler(directorFn)),
 		)
 		// run the proxy backend
 		go func() {
@@ -102,7 +106,7 @@ func TestNewProxy(t *testing.T) {
 		t.Helper()
 
 		// First, we need to create a client connection to this backend.
-		proxySrv := NewProxy(testCC)
+		proxySrv := proxy.NewProxy(testCC)
 
 		// run the proxy backend
 		go func() {
