@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
@@ -112,7 +113,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
 	ret := make(chan error, 1)
 	go func() {
-		f := &anypb.Any{}
+		f := &emptypb.Empty{}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
 				ret <- err // this can be io.EOF which is happy case
