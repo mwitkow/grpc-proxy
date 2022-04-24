@@ -31,7 +31,7 @@ proxy := proxy.NewProxy(clientConn)
 More advanced users will want to define a `StreamDirector` that can make more complex decisions on what
 to do with the request.
 ```go
-director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
+director = func(ctx context.Context, fullMethodName string) (context.Context, grpc.ClientConnInterface, error) {
     md, _ := metadata.FromIncomingContext(ctx)
     outCtx = metadata.NewOutgoingContext(ctx, md.Copy())
     return outCtx, cc, nil

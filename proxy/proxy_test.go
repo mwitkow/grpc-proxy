@@ -38,7 +38,7 @@ func TestLegacyBehaviour(t *testing.T) {
 	// 2.
 	go func() {
 		// Second, we need to implement the SteamDirector.
-		directorFn := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
+		directorFn := func(ctx context.Context, fullMethodName string) (context.Context, grpc.ClientConnInterface, error) {
 			md, _ := metadata.FromIncomingContext(ctx)
 			outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 			return outCtx, testCC, nil
@@ -147,7 +147,7 @@ func TestNewProxy(t *testing.T) {
 
 // backendDialer dials the testservice.TestServiceServer either by connecting
 // to the user-supplied server, or by creating a mock server using bufconn.
-func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func backendDialer(t *testing.T, opts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
 	t.Helper()
 
 	if *testBackend != "" {
@@ -192,7 +192,7 @@ func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, err
 	return backendCC, nil
 }
 
-func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) (grpc.ClientConnInterface, error) {
 	opts = append(opts,
 		grpc.WithInsecure(),
 		grpc.WithBlock(),
