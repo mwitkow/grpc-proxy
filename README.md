@@ -21,7 +21,7 @@ is a generic gRPC reverse proxy handler.
 ## Proxy Handler
 
 The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
-not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
+not know about registered handlers or their data types. Please consult the docs, here's an example usage.
 
 You can call `proxy.NewProxy` to create a `*grpc.Server` that proxies requests.
 ```go
@@ -32,10 +32,6 @@ More advanced users will want to define a `StreamDirector` that can make more co
 to do with the request.
 ```go
 director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
-    md, _ := metadata.FromIncomingContext(ctx)
-    outCtx = metadata.NewOutgoingContext(ctx, md.Copy())
-    return outCtx, cc, nil
-	
     // Make sure we never forward internal services.
     if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
         return outCtx, nil, status.Errorf(codes.Unimplemented, "Unknown method")
