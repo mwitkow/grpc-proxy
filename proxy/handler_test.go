@@ -198,7 +198,8 @@ func (s *ProxyHappySuite) SetupSuite() {
 
 	// Setup of the proxy's Director.
 	//lint:ignore SA1019 regression test
-	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(),
+		grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.Codec())))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
@@ -213,7 +214,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	}
 	s.proxy = grpc.NewServer(
 		//lint:ignore SA1019 regression test
-		grpc.CustomCodec(proxy.Codec()),
+		grpc.ForceServerCodec(proxy.Codec()),
 		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.

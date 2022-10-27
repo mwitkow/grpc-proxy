@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"google.golang.org/grpc/credentials/insecure"
 	"net"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestLegacyBehaviour(t *testing.T) {
 
 	// 1.
 	//lint:ignore SA1019 regression test
-	testCC, err := backendDialer(t, grpc.WithCodec(proxy.Codec()))
+	testCC, err := backendDialer(t, grpc.WithDefaultCallOptions(grpc.ForceCodec(proxy.Codec())))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,7 @@ func TestLegacyBehaviour(t *testing.T) {
 		// Set up the proxy server and then serve from it like in step one.
 		proxySrv := grpc.NewServer(
 			//lint:ignore SA1019 regression test
-			grpc.CustomCodec(proxy.Codec()), // was previously needed for proxy to function.
+			grpc.ForceServerCodec(proxy.Codec()), // was previously needed for proxy to function.
 			grpc.UnknownServiceHandler(proxy.TransparentHandler(directorFn)),
 		)
 		// run the proxy backend
@@ -71,7 +72,7 @@ func TestLegacyBehaviour(t *testing.T) {
 	// users do not need to know they're talking to a proxy.
 	proxyCC, err := grpc.Dial(
 		"bufnet",
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return proxyBc.Dial()
@@ -130,7 +131,7 @@ func TestNewProxy(t *testing.T) {
 	t.Logf("dialing %s", proxyBc.Addr())
 	proxyCC, err := grpc.Dial(
 		proxyBc.Addr().String(),
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return proxyBc.Dial()
@@ -175,7 +176,7 @@ func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, err
 	})
 
 	opts = append(opts,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return backendBc.Dial()
@@ -194,7 +195,7 @@ func backendDialer(t *testing.T, opts ...grpc.DialOption) (*grpc.ClientConn, err
 
 func backendSvcDialer(t *testing.T, addr string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts = append(opts,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
 
