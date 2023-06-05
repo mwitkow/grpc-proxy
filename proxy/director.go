@@ -5,8 +5,15 @@ package proxy
 
 import (
 	"context"
+	"io"
+
 	"google.golang.org/grpc"
 )
+
+type CloseableClientConnInterface interface {
+	grpc.ClientConnInterface
+	io.Closer
+}
 
 // StreamDirector returns a gRPC ClientConn to be used to forward the call to.
 //
@@ -21,4 +28,4 @@ import (
 // are invoked. So decisions around authorization, monitoring etc. are better to be handled there.
 //
 // See the rather rich example.
-type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error)
+type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, CloseableClientConnInterface, error)
