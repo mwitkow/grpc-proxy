@@ -38,7 +38,7 @@ func TestLegacyBehaviour(t *testing.T) {
 	// 2.
 	go func() {
 		// Second, we need to implement the SteamDirector.
-		directorFn := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
+		directorFn := func(ctx context.Context, fullMethodName string) (context.Context, grpc.ClientConnInterface, error) {
 			md, _ := metadata.FromIncomingContext(ctx)
 			outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 			return outCtx, testCC, nil
