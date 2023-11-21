@@ -22,3 +22,11 @@ import (
 //
 // See the rather rich example.
 type StreamDirector func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error)
+
+type StreamDirectorI func(ctx context.Context, fullMethodName string) (context.Context, grpc.ClientConnInterface, error)
+
+func toStreamDirectorI(director StreamDirector) StreamDirectorI {
+	return func(ctx context.Context, fullMethodName string) (context.Context, grpc.ClientConnInterface, error) {
+		return director(ctx, fullMethodName)
+	}
+}
