@@ -23,7 +23,13 @@ var (
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a generated pb.go file.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
-	streamer := &handler{director}
+	RegisterServiceI(server, toStreamDirectorI(director), serviceName, methodNames...)
+}
+
+// RegisterServiceI sets up a proxy handler for a particular gRPC service and method.
+// The behaviour is the same as if you were registering a handler method, e.g. from a generated pb.go file.
+func RegisterServiceI(server *grpc.Server, director StreamDirectorI, serviceName string, methodNames ...string) {
+	streamer := &handler{director: director}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*interface{})(nil),
@@ -44,12 +50,18 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 // The indented use here is as a transparent proxy, where the server doesn't know about the services implemented by the
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 func TransparentHandler(director StreamDirector) grpc.StreamHandler {
+	streamer := &handler{director: toStreamDirectorI(director)}
+	return streamer.handler
+}
+
+// TransparentHandlerI is TransparentHandler with grpc.ClientConnInterface support.
+func TransparentHandlerI(director StreamDirectorI) grpc.StreamHandler {
 	streamer := &handler{director: director}
 	return streamer.handler
 }
 
 type handler struct {
-	director StreamDirector
+	director StreamDirectorI
 }
 
 // handler is where the real magic of proxying happens.
@@ -70,7 +82,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	defer clientCancel()
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := backendConn.NewStream(clientCtx, clientStreamDescForProxying, fullMethodName)
 	if err != nil {
 		return err
 	}
