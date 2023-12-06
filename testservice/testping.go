@@ -99,7 +99,7 @@ func TestTestServiceServerImpl(t *testing.T, client TestServiceClient) {
 			}
 			res, err := stream.Recv()
 			if err != nil {
-				t.Errorf("receiving full duplex stream: %w", err)
+				t.Errorf("receiving full duplex stream: %v", err)
 				return
 			}
 			t.Logf("got %v (%d)", res.Value, res.Counter)
