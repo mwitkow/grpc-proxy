@@ -23,7 +23,7 @@ var (
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a generated pb.go file.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
-	streamer := &handler{director}
+	streamer := &handler{director: director}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*interface{})(nil),
@@ -41,15 +41,24 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 }
 
 // TransparentHandler returns a handler that attempts to proxy all requests that are not registered in the server.
-// The indented use here is as a transparent proxy, where the server doesn't know about the services implemented by the
+// The intended use here is as a transparent proxy, where the server doesn't know about the services implemented by the
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 func TransparentHandler(director StreamDirector) grpc.StreamHandler {
-	streamer := &handler{director: director}
+	return TransparentHandlerWithOpts(director)
+}
+
+// TransparentHandlerWithOpts returns a handler that attempts to proxy all requests that are not registered in the server.
+// The provided call-options will be set on the internal gRPC client stream created by this transport.
+// The intended use here is as a transparent proxy, where the server doesn't know about the services implemented by the
+// backends. It should be used as a `grpc.UnknownServiceHandler`.
+func TransparentHandlerWithOpts(director StreamDirector, callOptions ...grpc.CallOption) grpc.StreamHandler {
+	streamer := &handler{director: director, callOpts: callOptions}
 	return streamer.handler
 }
 
 type handler struct {
 	director StreamDirector
+	callOpts []grpc.CallOption
 }
 
 // handler is where the real magic of proxying happens.
@@ -70,7 +79,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	defer clientCancel()
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, s.callOpts...)
 	if err != nil {
 		return err
 	}

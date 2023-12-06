@@ -4,6 +4,7 @@
 package proxy_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -35,6 +36,7 @@ const (
 	rejectingMdKey = "test-reject-rpc-if-in-context"
 
 	countListResponses = 20
+	maxRecvMsgSize     = 10 * 1024 * 1024
 )
 
 // asserting service is implemented on the server side and serves as a handler for stuff
@@ -179,6 +181,33 @@ func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
 	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
 }
 
+func (s *ProxyHappySuite) TestPingStream_TransparentHandlerOpts() {
+	stream, err := s.testClient.PingStream(context.Background(), grpc.MaxCallRecvMsgSize(maxRecvMsgSize))
+	require.NoError(s.T(), err, "PingStream request should be successful.")
+
+	// Check that the grpc CallOption is used by the TransparentHandler's client by creating a 9MB payload.
+	// The default for gRPC is 4MB, so this should fail if the option is unused.
+	var buff bytes.Buffer
+	for i := 0; i < 1024*1024; i++ {
+		buff.WriteString("123456789")
+	}
+	payload := buff.String()
+
+	ping := &pb.PingRequest{Value: payload}
+	require.NoError(s.T(), stream.Send(ping), "sending a large payload to PingStream must not fail")
+
+	resp, err := stream.Recv()
+	require.NoError(s.T(), err, "no error on ping")
+	require.Equal(s.T(), payload, resp.Value, "pong should reply with the large payload")
+
+	require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+	_, err = stream.Recv()
+	require.Equal(s.T(), io.EOF, err, "stream should close with io.EOF, meaining OK")
+	// Check that the trailer headers are here.
+	trailerMd := stream.Trailer()
+	assert.Len(s.T(), trailerMd, 1, "PingList trailer headers user contain metadata")
+}
+
 func (s *ProxyHappySuite) TestPingStream_StressTest() {
 	for i := 0; i < 50; i++ {
 		s.TestPingStream_FullDuplexWorks()
@@ -193,7 +222,7 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.serverListener, err = net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
 
-	s.server = grpc.NewServer()
+	s.server = grpc.NewServer(grpc.MaxRecvMsgSize(maxRecvMsgSize))
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
@@ -211,10 +240,13 @@ func (s *ProxyHappySuite) SetupSuite() {
 		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 		return outCtx, s.serverClientConn, nil
 	}
+
+	handler := proxy.TransparentHandlerWithOpts(director, grpc.MaxCallRecvMsgSize(maxRecvMsgSize))
 	s.proxy = grpc.NewServer(
 		//lint:ignore SA1019 regression test
 		grpc.CustomCodec(proxy.Codec()),
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+		grpc.MaxRecvMsgSize(maxRecvMsgSize),
+		grpc.UnknownServiceHandler(handler),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
 	proxy.RegisterService(s.proxy, director,
