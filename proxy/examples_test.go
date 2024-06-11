@@ -17,7 +17,8 @@ import (
 )
 
 var (
-	director proxy.StreamDirector
+	director     proxy.StreamDirector
+	errorHandler proxy.ErrorHandler
 )
 
 func ExampleNewProxy() {
@@ -33,14 +34,14 @@ func ExampleRegisterService() {
 	// A gRPC server with the proxying codec enabled.
 	server := grpc.NewServer()
 	// Register a TestService with 4 of its methods explicitly.
-	proxy.RegisterService(server, director,
+	proxy.RegisterService(server, director, errorHandler,
 		"mwitkow.testproto.TestService",
 		"PingEmpty", "Ping", "PingError", "PingList")
 }
 
 func ExampleTransparentHandler() {
 	grpc.NewServer(
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)))
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director, errorHandler)))
 }
 
 // Provides a simple example of a director that shields internal services and dials a staging or production backend.

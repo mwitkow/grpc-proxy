@@ -214,10 +214,10 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.proxy = grpc.NewServer(
 		//lint:ignore SA1019 regression test
 		grpc.CustomCodec(proxy.Codec()),
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director, errorHandler)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
-	proxy.RegisterService(s.proxy, director,
+	proxy.RegisterService(s.proxy, director, errorHandler,
 		"mwitkow.testproto.TestService",
 		"Ping")
 

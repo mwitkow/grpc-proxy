@@ -48,7 +48,7 @@ func TestLegacyBehaviour(t *testing.T) {
 		proxySrv := grpc.NewServer(
 			//lint:ignore SA1019 regression test
 			grpc.CustomCodec(proxy.Codec()), // was previously needed for proxy to function.
-			grpc.UnknownServiceHandler(proxy.TransparentHandler(directorFn)),
+			grpc.UnknownServiceHandler(proxy.TransparentHandler(directorFn, errorHandler)),
 		)
 		// run the proxy backend
 		go func() {

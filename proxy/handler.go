@@ -22,8 +22,8 @@ var (
 
 // RegisterService sets up a proxy handler for a particular gRPC service and method.
 // The behaviour is the same as if you were registering a handler method, e.g. from a generated pb.go file.
-func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
-	streamer := &handler{director}
+func RegisterService(server *grpc.Server, director StreamDirector, errorHandler ErrorHandler, serviceName string, methodNames ...string) {
+	streamer := &handler{director, errorHandler}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
 		HandlerType: (*interface{})(nil),
@@ -43,13 +43,14 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 // TransparentHandler returns a handler that attempts to proxy all requests that are not registered in the server.
 // The indented use here is as a transparent proxy, where the server doesn't know about the services implemented by the
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
-func TransparentHandler(director StreamDirector) grpc.StreamHandler {
-	streamer := &handler{director: director}
+func TransparentHandler(director StreamDirector, errorHandler ErrorHandler) grpc.StreamHandler {
+	streamer := &handler{director: director, errorHandler: errorHandler}
 	return streamer.handler
 }
 
 type handler struct {
-	director StreamDirector
+	director     StreamDirector
+	errorHandler ErrorHandler
 }
 
 // handler is where the real magic of proxying happens.
@@ -92,6 +93,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
 				clientCancel()
+				s.errorHandler(backendConn)
 				return status.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
 		case c2sErr := <-c2sErrChan:
@@ -101,6 +103,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			serverStream.SetTrailer(clientStream.Trailer())
 			// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 			if c2sErr != io.EOF {
+				s.errorHandler(backendConn)
 				return c2sErr
 			}
 			return nil
