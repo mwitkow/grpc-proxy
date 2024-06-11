@@ -19,7 +19,7 @@ func NewProxy(dst *grpc.ClientConn, opts ...grpc.ServerOption) *grpc.Server {
 
 // DefaultProxyOpt returns an grpc.UnknownServiceHandler with a DefaultDirector.
 func DefaultProxyOpt(cc *grpc.ClientConn) grpc.ServerOption {
-	return grpc.UnknownServiceHandler(TransparentHandler(DefaultDirector(cc)))
+	return grpc.UnknownServiceHandler(TransparentHandler(DefaultDirector(cc), DefaultErrorHandler()))
 }
 
 // DefaultDirector returns a very simple forwarding StreamDirector that forwards all
@@ -30,4 +30,8 @@ func DefaultDirector(cc *grpc.ClientConn) StreamDirector {
 		ctx = metadata.NewOutgoingContext(ctx, md.Copy())
 		return ctx, cc, nil
 	}
+}
+
+func DefaultErrorHandler() ErrorHandler {
+	return func(conn *grpc.ClientConn) {}
 }
