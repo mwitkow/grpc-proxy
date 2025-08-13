@@ -2,7 +2,7 @@
 
 [![Travis Build](https://travis-ci.org/mwitkow/grpc-proxy.svg?branch=master)](https://travis-ci.org/mwitkow/grpc-proxy)
 [![Go Report Card](https://goreportcard.com/badge/github.com/mwitkow/grpc-proxy)](https://goreportcard.com/report/github.com/mwitkow/grpc-proxy)
-[![GoDoc](http://img.shields.io/badge/GoDoc-Reference-blue.svg)](https://godoc.org/github.com/mwitkow/grpc-proxy)
+[![Go Reference](https://pkg.go.dev/badge/github.com/mwitkow/grpc-proxy.svg)](https://pkg.go.dev/github.com/mwitkow/grpc-proxy)
 [![Apache 2.0 License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 [gRPC Go](https://github.com/grpc/grpc-go) Proxy server
@@ -23,7 +23,7 @@ is a generic gRPC reverse proxy handler.
 The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
 not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
 
-Defining a `StreamDirector` that decides where (if at all) to send the request
+You can call `proxy.NewProxy` to create a `*grpc.Server` that proxies requests.
 ```go
 director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
     // Make sure we never forward internal services.
@@ -31,6 +31,7 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
         return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
     }
     md, ok := metadata.FromIncomingContext(ctx)
+
     if ok {
         // Decide on which backend to dial
         if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
@@ -45,8 +46,9 @@ director = func(ctx context.Context, fullMethodName string) (context.Context, *g
     return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
+
 Then you need to register it with a `grpc.Server`. The server may have other handlers that will be served
-locally:
+locally.
 
 ```go
 server := grpc.NewServer(
@@ -54,6 +56,19 @@ server := grpc.NewServer(
     grpc.UnknownServiceHandler(proxy.TransparentHandler(director)))
 pb_test.RegisterTestServiceServer(server, &testImpl{})
 ```
+
+## Testing
+To make debugging a bit simpler, there are some helpers.
+
+`testservice` contains a method `TestTestServiceServerImpl` which performs a complete test against
+the reference implementation of the `TestServiceServer`.
+
+In `proxy_test.go`, the test framework spins up a `TestServiceServer` that it tests the proxy 
+against. To make debugging a bit simpler (eg. if the developer needs to step into 
+`google.golang.org/grpc` methods), this `TestServiceServer` can be provided by a server by 
+passing `-test-backend=addr` to `go test`. A simple, local-only implementation of 
+`TestServiceServer` exists in [`testservice/server`](./testservice/server).
+
 
 ## License
 

@@ -4,26 +4,25 @@
 package proxy_test
 
 import (
+	"context"
+	"fmt"
 	"io"
-	"log"
 	"net"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 
-	"fmt"
-
+	"github.com/mwitkow/grpc-proxy/proxy"
 	pb "github.com/mwitkow/grpc-proxy/testservice"
 )
 
@@ -40,11 +39,13 @@ const (
 
 // asserting service is implemented on the server side and serves as a handler for stuff
 type assertingService struct {
-	logger *grpclog.Logger
-	t      *testing.T
+	t *testing.T
+	pb.UnsafeTestServiceServer
 }
 
-func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
+var _ pb.TestServiceServer = (*assertingService)(nil)
+
+func (s *assertingService) PingEmpty(ctx context.Context, _ *emptypb.Empty) (*pb.PingResponse, error) {
 	// Check that this call has client's metadata.
 	md, ok := metadata.FromIncomingContext(ctx)
 	assert.True(s.t, ok, "PingEmpty call must have metadata in context")
@@ -60,8 +61,8 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	return &pb.PingResponse{Value: ping.Value, Counter: 42}, nil
 }
 
-func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*pb.Empty, error) {
-	return nil, grpc.Errorf(codes.FailedPrecondition, "Userspace error.")
+func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.FailedPrecondition, "Userspace error.")
 }
 
 func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_PingListServer) error {
@@ -109,17 +110,12 @@ type ProxyHappySuite struct {
 	testClient pb.TestServiceClient
 }
 
-func (s *ProxyHappySuite) ctx() context.Context {
-	// Make all RPC calls last at most 1 sec, meaning all async issues or deadlock will not kill tests.
-	ctx, _ := context.WithTimeout(context.TODO(), 120*time.Second)
-	return ctx
-}
-
 func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
-	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
-	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(clientMdKey, "true"))
+	out, err := s.testClient.PingEmpty(ctx, &emptypb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
+	want := &pb.PingResponse{Value: pingDefaultValue, Counter: 42}
+	require.True(s.T(), proto.Equal(want, out))
 }
 
 func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
@@ -132,31 +128,32 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	headerMd := make(metadata.MD)
 	trailerMd := make(metadata.MD)
 	// This is an awkward calling convention... but meh.
-	out, err := s.testClient.Ping(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
+	out, err := s.testClient.Ping(context.Background(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
+	want := &pb.PingResponse{Value: "foo", Counter: 42}
 	require.NoError(s.T(), err, "Ping should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: "foo", Counter: 42}, out)
+	require.True(s.T(), proto.Equal(want, out))
 	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
 }
 
 func (s *ProxyHappySuite) TestPingErrorPropagatesAppError() {
-	_, err := s.testClient.PingError(s.ctx(), &pb.PingRequest{Value: "foo"})
+	_, err := s.testClient.PingError(context.Background(), &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "PingError should never succeed")
-	assert.Equal(s.T(), codes.FailedPrecondition, grpc.Code(err))
-	assert.Equal(s.T(), "Userspace error.", grpc.ErrorDesc(err))
+	assert.Equal(s.T(), codes.FailedPrecondition, status.Code(err))
+	assert.Equal(s.T(), "Userspace error.", status.Convert(err).Message())
 }
 
 func (s *ProxyHappySuite) TestDirectorErrorIsPropagated() {
 	// See SetupSuite where the StreamDirector has a special case.
-	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(rejectingMdKey, "true"))
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(rejectingMdKey, "true"))
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"})
 	require.Error(s.T(), err, "Director should reject this RPC")
-	assert.Equal(s.T(), codes.PermissionDenied, grpc.Code(err))
-	assert.Equal(s.T(), "testing rejection", grpc.ErrorDesc(err))
+	assert.Equal(s.T(), codes.PermissionDenied, status.Code(err))
+	assert.Equal(s.T(), "testing rejection", status.Convert(err).Message())
 }
 
 func (s *ProxyHappySuite) TestPingStream_FullDuplexWorks() {
-	stream, err := s.testClient.PingStream(s.ctx())
+	stream, err := s.testClient.PingStream(context.Background())
 	require.NoError(s.T(), err, "PingStream request should be successful.")
 
 	for i := 0; i < countListResponses; i++ {
@@ -196,27 +193,26 @@ func (s *ProxyHappySuite) SetupSuite() {
 	s.serverListener, err = net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
 
-	grpclog.SetLogger(log.New(os.Stderr, "grpc: ", log.LstdFlags))
-
 	s.server = grpc.NewServer()
 	pb.RegisterTestServiceServer(s.server, &assertingService{t: s.T()})
 
 	// Setup of the proxy's Director.
+	//lint:ignore SA1019 regression test
 	s.serverClientConn, err = grpc.Dial(s.serverListener.Addr().String(), grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
-	director := func(ctx context.Context, fullName string) (context.Context, *grpc.ClientConn, error) {
+	director := func(ctx context.Context, fullName string) (context.Context, grpc.ClientConnInterface, error) {
 		md, ok := metadata.FromIncomingContext(ctx)
 		if ok {
 			if _, exists := md[rejectingMdKey]; exists {
-				return ctx, nil, grpc.Errorf(codes.PermissionDenied, "testing rejection")
+				return ctx, nil, status.Errorf(codes.PermissionDenied, "testing rejection")
 			}
 		}
 		// Explicitly copy the metadata, otherwise the tests will fail.
-		outCtx, _ := context.WithCancel(ctx)
-		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
+		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 		return outCtx, s.serverClientConn, nil
 	}
 	s.proxy = grpc.NewServer(
+		//lint:ignore SA1019 regression test
 		grpc.CustomCodec(proxy.Codec()),
 		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
@@ -235,7 +231,9 @@ func (s *ProxyHappySuite) SetupSuite() {
 		s.proxy.Serve(s.proxyListener)
 	}()
 
-	clientConn, err := grpc.Dial(strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1), grpc.WithInsecure(), grpc.WithTimeout(1*time.Second))
+	dCtx, ccl := context.WithTimeout(context.Background(), time.Second)
+	defer ccl()
+	clientConn, err := grpc.DialContext(dCtx, strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1), grpc.WithInsecure())
 	require.NoError(s.T(), err, "must not error on deferred client Dial")
 	s.testClient = pb.NewTestServiceClient(clientConn)
 }
@@ -261,25 +259,4 @@ func (s *ProxyHappySuite) TearDownSuite() {
 
 func TestProxyHappySuite(t *testing.T) {
 	suite.Run(t, &ProxyHappySuite{})
-}
-
-// Abstraction that allows us to pass the *testing.T as a grpclogger.
-type testingLog struct {
-	testing.T
-}
-
-func (t *testingLog) Fatalln(args ...interface{}) {
-	t.T.Fatal(args...)
-}
-
-func (t *testingLog) Print(args ...interface{}) {
-	t.T.Log(args...)
-}
-
-func (t *testingLog) Printf(format string, args ...interface{}) {
-	t.T.Logf(format, args...)
-}
-
-func (t *testingLog) Println(args ...interface{}) {
-	t.T.Log(args...)
 }
