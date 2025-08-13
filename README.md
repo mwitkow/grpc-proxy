@@ -25,32 +25,25 @@ not know about registered handlers or their data types. Please consult the docs,
 
 You can call `proxy.NewProxy` to create a `*grpc.Server` that proxies requests.
 ```go
-proxy := proxy.NewProxy(clientConn)
-``` 
-
-More advanced users will want to define a `StreamDirector` that can make more complex decisions on what
-to do with the request.
-```go
 director = func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
-    md, _ := metadata.FromIncomingContext(ctx)
-    outCtx = metadata.NewOutgoingContext(ctx, md.Copy())
-    return outCtx, cc, nil
-	
     // Make sure we never forward internal services.
     if strings.HasPrefix(fullMethodName, "/com.example.internal.") {
-        return outCtx, nil, status.Errorf(codes.Unimplemented, "Unknown method")
+        return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
     }
-    
+    md, ok := metadata.FromIncomingContext(ctx)
+
     if ok {
         // Decide on which backend to dial
         if val, exists := md[":authority"]; exists && val[0] == "staging.api.example.com" {
             // Make sure we use DialContext so the dialing can be cancelled/time out together with the context.
-            return outCtx, grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec())), nil
+            conn, err := grpc.DialContext(ctx, "api-service.staging.svc.local", grpc.WithCodec(proxy.Codec()))
+            return ctx, conn, err
         } else if val, exists := md[":authority"]; exists && val[0] == "api.example.com" {
-            return outCtx, grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec())), nil
+            conn, err := grpc.DialContext(ctx, "api-service.prod.svc.local", grpc.WithCodec(proxy.Codec()))
+            return ctx, conn, err
         }
     }
-    return outCtx, nil, status.Errorf(codes.Unimplemented, "Unknown method")
+    return nil, nil, status.Errorf(codes.Unimplemented, "Unknown method")
 }
 ```
 
