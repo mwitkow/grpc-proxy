@@ -4,7 +4,9 @@ go 1.21
 
 require (
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
+	golang.org/x/text v0.3.8 // indirect
+	google.golang.org/genproto v0.0.0-20210401141331-865547bb08e2 // indirect
 	google.golang.org/grpc v1.36.1
 	google.golang.org/protobuf v1.26.0
 	honnef.co/go/tools v0.1.3
