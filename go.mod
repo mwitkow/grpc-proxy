@@ -1,11 +1,11 @@
 module github.com/mwitkow/grpc-proxy
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
-	golang.org/x/text v0.3.8 // indirect
+	golang.org/x/sync v0.12.0
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto v0.0.0-20210401141331-865547bb08e2 // indirect
 	google.golang.org/grpc v1.36.1
 	google.golang.org/protobuf v1.26.0
@@ -17,12 +17,9 @@ require (
 	github.com/davecgh/go-spew v1.1.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	golang.org/x/mod v0.3.0 // indirect
-	golang.org/x/net v0.0.0-20210331212208-0fccb6fa2b5c // indirect
-	golang.org/x/sys v0.0.0-20210331175145-43e1dd70ce54 // indirect
-	golang.org/x/text v0.3.6 // indirect
-	golang.org/x/tools v0.1.0 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/genproto v0.0.0-20210401141331-865547bb08e2 // indirect
+	golang.org/x/mod v0.17.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
 )
