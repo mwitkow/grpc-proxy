@@ -21,7 +21,7 @@ is a generic gRPC reverse proxy handler.
 ## Proxy Handler
 
 The package [`proxy`](proxy/) contains a generic gRPC reverse proxy handler that allows a gRPC server to
-not know about registered handlers or their data types. Please consult the docs, here's an exaple usage.
+not know about registered handlers or their data types. Please consult the docs, here's an example usage.
 
 You can call `proxy.NewProxy` to create a `*grpc.Server` that proxies requests.
 ```go
