@@ -83,7 +83,11 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	for i := 0; i < 2; i++ {
 		select {
 		case s2cErr := <-s2cErrChan:
-			if s2cErr == io.EOF {
+			if s2cErr == nil {
+				// We got an io.EOF from SendMsg to the client. That means we should tear down the handler.
+				// We can convert this back into an io.EOF here.
+				return io.EOF
+			} else if s2cErr == io.EOF {
 				// this is the happy case where the sender has encountered io.EOF, and won't be sending anymore./
 				// the clientStream>serverStream may continue pumping though.
 				clientStream.CloseSend()
@@ -151,6 +155,15 @@ func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientSt
 				break
 			}
 			if err := dst.SendMsg(f); err != nil {
+				if err == io.EOF {
+					// Squash an io.EOF here to ensure that it's not confused as being a 'RecvMsg' EOF.
+					// For a RecvMsg EOF, we want to continue forwarding from the client until we get an error there
+					// too.
+					// For a SendMsg io.EOF error here, that means the client is gone and we should give up on
+					// forwarding from the client.
+					ret <- nil
+					return
+				}
 				ret <- err
 				break
 			}
